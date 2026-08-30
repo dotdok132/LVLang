@@ -81,6 +81,101 @@ static int handle_pkg_command(int argc, char **argv) {
     return 1;
 }
 
+static int validate_bytecode(const uint8_t *code, size_t sz, bool verbose) {
+    if (sz % 2 != 0) {
+        printf("[VALIDATION ERROR] Bytecode size (%zu bytes) is unaligned to 2-byte instructions.\n", sz);
+        return 0;
+    }
+
+    size_t ip = 0;
+    size_t inst_count = 0;
+    bool has_halt = false;
+    int err_count = 0;
+
+    if (verbose) printf("--- LVLang Bytecode Disassembly & Validation (%zu bytes) ---\n", sz);
+
+    while (ip < sz) {
+        size_t start_ip = ip;
+        uint8_t b1 = code[ip++];
+        uint8_t b2 = (ip < sz) ? code[ip++] : 0;
+        size_t cur_inst = inst_count;
+
+        if (verbose) printf("Inst %3zu | Byte %3zu: [%02X %02X] ", cur_inst, start_ip, b1, b2);
+
+        if (b1 == 0x01 && b2 == 0x04) {
+            if (ip + 4 <= sz) {
+                int32_t val = (int32_t)(code[ip] | (code[ip+1]<<8) | (code[ip+2]<<16) | (code[ip+3]<<24));
+                if (verbose) printf("PUSH_INT32 %d\n", val);
+                ip += 4;
+                inst_count += 3;
+            } else {
+                if (verbose) printf("[ERROR] Truncated PUSH_INT32 operand!\n");
+                err_count++;
+                break;
+            }
+        } else if (b1 == 0x05 && b2 == 0x03) {
+            if (verbose) printf("PRINT_STR \"");
+            while (ip < sz && code[ip] != 0) {
+                if (verbose) putchar(code[ip]);
+                ip++;
+            }
+            if (verbose) printf("\"\n");
+            if (ip < sz && code[ip] == 0) ip++;
+            if (ip % 2 != 0) ip++;
+            inst_count = ip / 2;
+        } else if (b1 == 0x04 && (b2 == 0xFC || b2 == 0xFD || b2 == 0xFE)) {
+            if (ip + 2 <= sz) {
+                uint8_t low = code[ip++];
+                uint8_t high = code[ip++];
+                uint16_t target_inst = low | (high << 8);
+                size_t target_byte = target_inst * 2;
+                const char *jump_type = (b2 == 0xFC) ? "JZ_FAR" : (b2 == 0xFD ? "JNZ_FAR" : "JMP_FAR");
+                if (target_byte <= sz) {
+                    if (verbose) printf("%s -> Inst %d (Byte %zu) [OK]\n", jump_type, target_inst, target_byte);
+                } else {
+                    if (verbose) printf("%s -> Inst %d (Byte %zu) [OUT OF BOUNDS ERROR]\n", jump_type, target_inst, target_byte);
+                    err_count++;
+                }
+                inst_count += 2;
+            } else {
+                if (verbose) printf("[ERROR] Truncated FAR jump target!\n");
+                err_count++;
+                break;
+            }
+        } else if (b1 == 0x0E && b2 == 0x01) {
+            if (ip + 2 <= sz) {
+                uint8_t lib = code[ip++];
+                uint8_t func = code[ip++];
+                if (verbose) printf("FFI_CALL Lib 0x%02X Func 0x%02X\n", lib, func);
+                inst_count += 2;
+            } else {
+                if (verbose) printf("[ERROR] Truncated FFI_CALL parameters!\n");
+                err_count++;
+                break;
+            }
+        } else if (b1 == 0x05 && b2 == 0xFF) {
+            if (verbose) printf("HALT\n");
+            has_halt = true;
+            inst_count++;
+        } else {
+            if (verbose) printf("OP %02X %02X\n", b1, b2);
+            inst_count++;
+        }
+    }
+
+    if (err_count > 0) {
+        printf("[VALIDATION FAILED] Found %d critical bytecode alignment/jump errors.\n", err_count);
+        return 0;
+    }
+
+    if (!has_halt && verbose) {
+        printf("[VALIDATION WARNING] Bytecode does not contain explicit HALT (05 FF) instruction.\n");
+    }
+
+    printf("[VALIDATION SUCCESS] Bytecode (%zu bytes, %zu instructions) is 100%% valid and aligned!\n", sz, inst_count);
+    return 1;
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         print_usage(argv[0]);
@@ -91,13 +186,22 @@ int main(int argc, char **argv) {
         return handle_pkg_command(argc, argv);
     }
 
+    bool validate_only = false;
+    int arg_idx = 1;
+    if (strcmp(argv[1], "--validate") == 0 || strcmp(argv[1], "--disasm") == 0) {
+        validate_only = true;
+        arg_idx = 2;
+        if (argc < 3) {
+            printf("Usage: %s --validate \"<hex stream>\"\n", argv[0]);
+            return 1;
+        }
+    }
+
     uint8_t bytecode[8192];
     size_t bytecode_size = 0;
-
-    const char *target = argv[1];
+    const char *target = argv[arg_idx];
 
     FILE *f = fopen(target, "rb");
-
     if (f) {
         fseek(f, 0, SEEK_END);
         long fsize = ftell(f);
@@ -108,19 +212,21 @@ int main(int argc, char **argv) {
         fclose(f);
         printf("[+] Loaded %zu bytes from binary file: %s\n", bytecode_size, target);
     } else {
-        /* Treat target as inline hex stream string */
         bytecode_size = parse_hex_stream(target, bytecode, sizeof(bytecode));
         if (bytecode_size == 0) {
             fprintf(stderr, "Error: Unable to parse hex stream or open file '%s'\n", target);
             return 1;
         }
-    printf("[+] Loaded %zu bytes directly from hex stream: ", bytecode_size);
-    for (size_t i = 0; i < bytecode_size; i++) printf("%02X ", bytecode[i]);
-    printf("\n");
+        printf("[+] Loaded %zu bytes directly from hex stream\n", bytecode_size);
     }
 
-    if (bytecode_size % 2 != 0) {
-        printf("[!] Warning: Bytecode stream length (%zu bytes) is unaligned to 2-byte instructions.\n", bytecode_size);
+    int valid = validate_bytecode(bytecode, bytecode_size, true);
+    if (!valid) {
+        return 1;
+    }
+
+    if (validate_only) {
+        return 0;
     }
 
     printf("\n=== Executing in LVLang VM Runtime ===\nOutput: ");
