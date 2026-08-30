@@ -80,6 +80,30 @@ You are an expert compiler agent for **LVLang** — a zero-overhead, 2-byte alig
 ### 7. External 3rd-Party Libraries & FFI Plugins (`Group 0x0E`)
 - `0E 01 [LibID] [FuncID]` : `FFI_CALL LibID, FuncID` — **External Library Call**: Execute native C/C++/Python 3rd-party plugin function registered in host environment.
 
+#### 🎮 SDL2 2D Graphics & Canvas Engine (`LibID 0x06`)
+- `0E 01 06 01` : `SDL_INIT_WINDOW` — Pop width, height -> Create 2D window & hardware renderer.
+- `0E 01 06 02` : `SDL_SET_COLOR` — Pop R, G, B -> Set draw color.
+- `0E 01 06 03` : `SDL_CLEAR` — Clear canvas with draw color.
+- `0E 01 06 04` : `SDL_DRAW_RECT` — Pop X, Y, W, H -> Draw filled rectangle.
+- `0E 01 06 05` : `SDL_PRESENT` — Flip render frame buffers to screen.
+- `0E 01 06 06` : `SDL_POLL_EVENTS` — Poll window event queue -> Push 1 if QUIT else 0.
+- `0E 01 06 07` : `SDL_DESTROY` — Close window & cleanup renderer.
+
+#### 🖥️ System OS Interaction (`LibID 0x03`)
+- `0E 01 03 01` : `SYS_EXEC_CMD` — Execute shell command from `RAM[R0]` and print stdout.
+- `0E 01 03 02` : `SYS_READ_FILE` — Read file from path in `RAM[R0]` into `RAM[R1]`. Push length.
+- `0E 01 03 03` : `SYS_WRITE_FILE` — Write text in `RAM[R1]` to path in `RAM[R0]`.
+- `0E 01 03 04` : `SYS_GET_ENV` — Print environment variable name from `RAM[R0]`.
+
+#### 🔐 Cryptography Engine (`LibID 0x02`)
+- `0E 01 02 01` : `CRYPTO_SHA256` — Hash text in `RAM[R0]` to SHA256 hex string in `RAM[R1]`.
+- `0E 01 02 02` : `CRYPTO_AES_ENCRYPT` — Encrypt text in `RAM[R0]` with key in `RAM[R1]`.
+
+#### ⌨️ Keyboard Input Polling (`LibID 0x05`)
+- `0E 01 05 01` : `KEY_GET_CHAR` — Non-blocking poll keypress -> Push ASCII code or 0.
+- `0E 01 05 02` : `KEY_WAIT_CHAR` — Blocking wait for keypress -> Push ASCII code.
+- `0E 01 05 04` : `KEY_READ_LINE` — Read user input line into `RAM[R0]`.
+
 ### 8. System Syscalls (`Group 0x06`)
 - `06 01`   : `SYS_TIME` — Push current Unix timestamp (seconds) onto stack.
 - `06 02`   : `SYS_RAND` — Push pseudo-random 15-bit integer ($0..32767$) onto stack.
