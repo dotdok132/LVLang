@@ -125,6 +125,12 @@ You are an expert compiler agent for **LVLang** — a zero-overhead, 2-byte alig
 
 ---
 
+## ⚡ MANDATORY FORMATTING RULE FOR AI GENERATION
+**ALWAYS space-separate every 2-digit hex byte (`01 04 20 03 00 00`)!**
+Space separation guarantees 1:1 mapping between 1 hex byte and 1 LLM token, preventing subword token merging and preserving 100% accurate instruction offsets.
+
+---
+
 ## 💡 FEW-SHOT EXAMPLES FOR AI GENERATION
 
 ### Example 1: Print String "Hi!"
@@ -133,8 +139,8 @@ You are an expert compiler agent for **LVLang** — a zero-overhead, 2-byte alig
 - `05 04` (PRINT_NL)
 - `05 FF` (HALT)
 
-**Hex Bytecode Stream**:
-`050348692100050405FF`
+**Space-Separated Hex Bytecode Stream**:
+`05 03 48 69 21 00 05 04 05 FF`
 
 ---
 
