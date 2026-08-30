@@ -118,16 +118,11 @@ static int validate_bytecode(const uint8_t *code, size_t sz, bool verbose) {
         if (verbose) printf("Inst %3zu | Byte %3zu: [%02X %02X] ", cur_inst, start_ip, b1, b2);
 
         if (b1 == 0x01 && b2 == 0x04) {
-            if (ip + 4 <= sz) {
-                int32_t val = (int32_t)(code[ip] | (code[ip+1]<<8) | (code[ip+2]<<16) | (code[ip+3]<<24));
-                if (verbose) printf("PUSH_INT32 %d\n", val);
-                ip += 4;
-                inst_count += 3;
-            } else {
-                if (verbose) printf("[ERROR] Truncated PUSH_INT32 operand!\n");
-                err_count++;
-                break;
-            }
+            if (verbose) printf("PUSH_SHIFT_8\n");
+            inst_count++;
+        } else if (b1 == 0x01 && b2 == 0x05) {
+            if (verbose) printf("PUSH_SHIFT_16\n");
+            inst_count++;
         } else if (b1 == 0x05 && b2 == 0x03) {
             if (verbose) printf("PRINT_STR \"");
             while (ip < sz && code[ip] != 0) {

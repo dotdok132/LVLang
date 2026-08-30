@@ -242,17 +242,11 @@ int lvl_step(lvl_vm_t *vm) {
                 /* PUSH_IMM 7-bit */
                 lvl_push(vm, (int32_t)(b2 & 0x7F));
             } else if (b2 == 0x04) {
-                /* PUSH_INT32: 32-bit Extended Immediate Integer */
-                if (vm->ip + 3 < vm->bytecode_size) {
-                    uint8_t u0 = vm->bytecode[vm->ip++];
-                    uint8_t u1 = vm->bytecode[vm->ip++];
-                    uint8_t u2 = vm->bytecode[vm->ip++];
-                    uint8_t u3 = vm->bytecode[vm->ip++];
-                    int32_t val32 = (int32_t)((uint32_t)u0 | ((uint32_t)u1 << 8) | ((uint32_t)u2 << 16) | ((uint32_t)u3 << 24));
-                    lvl_push(vm, val32);
-                } else {
-                    vm->status = LVL_ERR_OUT_OF_BOUNDS;
-                }
+                /* PUSH_SHIFT_8: Pop a, push (a << 8) */
+                if (lvl_pop(vm, &a)) lvl_push(vm, a << 8);
+            } else if (b2 == 0x05) {
+                /* PUSH_SHIFT_16: Pop a, push (a << 16) */
+                if (lvl_pop(vm, &a)) lvl_push(vm, a << 16);
             } else if (b2 == 0x01) {
                 lvl_pop(vm, &a);
             } else if (b2 == 0x02) {
