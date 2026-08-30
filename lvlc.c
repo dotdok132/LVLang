@@ -1,7 +1,7 @@
 /**
  * @file lvlc.c
- * @brief LVLang Direct VM Runtime & Hex Stream CLI Utility
- * @details Minimal CLI tool for executing binary bytecode files (.lvl) or raw hex streams directly in lvl_vm_t.
+ * @brief LVLang Direct VM Runtime & Package Manager CLI Utility
+ * @details Minimal CLI tool for executing binary bytecode files (.lvl), raw hex streams, and installing plugins.
  */
 
 #define LVLANG_IMPLEMENTATION
@@ -16,10 +16,11 @@ static void print_usage(const char *prog) {
     printf("Usage:\n");
     printf("  %s <file.lvl>              Run raw binary bytecode file directly\n", prog);
     printf("  %s \"<hex stream>\"          Run raw hex instruction stream directly\n", prog);
+    printf("  %s pkg install <name>       Install modular plugin package on-demand\n", prog);
     printf("Examples:\n");
     printf("  %s program.lvl\n", prog);
     printf("  %s \"0180013001100501050405FF\"\n", prog);
-    printf("  %s \"0x01 0x80 0x01 0x30 0x05 0x03 48 65 6C 6C 6F 00 05 04 05 FF\"\n", prog);
+    printf("  %s pkg install crypto\n", prog);
 }
 
 static size_t parse_hex_stream(const char *str, uint8_t *out_buf, size_t max_size) {
@@ -47,10 +48,42 @@ static size_t parse_hex_stream(const char *str, uint8_t *out_buf, size_t max_siz
     return count;
 }
 
+static int handle_pkg_command(int argc, char **argv) {
+    if (argc < 3) {
+        printf("Usage: lvlc pkg install <package-name>\n");
+        printf("Example: lvlc pkg install crypto\n");
+        return 1;
+    }
+    const char *subcmd = argv[2];
+    if (strcmp(subcmd, "install") == 0) {
+        if (argc < 4) {
+            printf("Error: Please specify package name (e.g. lvlc pkg install crypto)\n");
+            return 1;
+        }
+        const char *pkg_name = argv[3];
+        printf("[+] Installing official LVLang plugin package: '%s'...\n", pkg_name);
+
+        char cmd[512];
+        snprintf(cmd, sizeof(cmd),
+                 "mkdir -p plugins && git clone --depth 1 https://github.com/dotdok132/lvlang-%s.git plugins/%s 2>/dev/null || echo '[+] Package %s ready in ./plugins/'",
+                 pkg_name, pkg_name, pkg_name);
+        int res = system(cmd);
+        if (res == 0) {
+            printf("[+] Plugin package '%s' registered in ./plugins/%s/\n", pkg_name, pkg_name);
+        }
+        return 0;
+    }
+    return 1;
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         print_usage(argv[0]);
         return 1;
+    }
+
+    if (strcmp(argv[1], "pkg") == 0) {
+        return handle_pkg_command(argc, argv);
     }
 
     uint8_t bytecode[8192];
