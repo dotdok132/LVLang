@@ -44,23 +44,28 @@ You are an expert compiler agent for **LVLang** — a zero-overhead, 2-byte alig
 - `03 05`   : `GTE` — Pop $b, a$; push $1$ if $a \ge b$ else $0$.
 - `03 06`   : `LTE` — Pop $b, a$; push $1$ if $a \le b$ else $0$.
 
-### 4. Control Flow, Subroutines & Far Jumps (`Group 0x04`)
+### 4. Control Flow, Subroutines, Traps & Coroutines (`Group 0x04`)
 - `04 10+Idx`: `JMP Idx` — Jump to 0-indexed instruction index `Idx` ($0..63$).
 - `04 50+Idx`: `JZ Idx` — Pop stack; jump to `Idx` if stack top $== 0$.
 - `04 90+Idx`: `JNZ Idx` — Pop stack; jump to `Idx` if stack top $\neq 0$.
 - `04 D0+Idx`: `CALL Idx` — Push return address, jump to subroutine `Idx`.
 - `04 00`   : `RET` — Return from subroutine.
-- `04 FE [Low High]`: `JMP_FAR` — **16-Bit Long Jump**: Unconditional jump to instruction index $0..65,535$ (Up to 128KB program size!).
-- `04 FF [Low High]`: `CALL_FAR` — **16-Bit Long Subroutine Call**: Push return address, jump to instruction index $0..65,535$.
-- `04 FC [Low High]`: `JZ_FAR` — **16-Bit Long Jump If Zero**.
-- `04 FD [Low High]`: `JNZ_FAR` — **16-Bit Long Jump If Not Zero**.
+- `04 01`   : `YIELD` — **Async Coroutine Yield**: Non-blocking pause; return control to host app (`LVL_STATUS_YIELD = 2`).
+- `04 05 [Low High]`: `SET_TRAP Target` — **Try/Catch Exception Handler**: Set `trap_ip` to catch errors (div-by-zero, underflow) without crashing VM.
+- `04 06`   : `CLEAR_TRAP` — Disable exception trap handler.
+- `04 FE [Low High]`: `JMP_FAR` — **16-Bit Long Jump**: Unconditional jump to index $0..65,535$ (Up to 128KB program size!).
+- `04 FF [Low High]`: `CALL_FAR` — **16-Bit Long Subroutine Call**.
 
 ### 5. Macro Shortcut Opcodes (`Group 0x07` — 1-Command Abbreviations)
-- `07 10+R` : `MACRO_PRINT_REG R` — **1-Command Output**: Print integer from register $R$ + newline `\n` (Replaces 3 instructions: LOAD R, PRINT_NUM, PRINT_NL).
+- `07 10+R` : `MACRO_PRINT_REG R` — **1-Command Output**: Print integer from register $R$ + newline `\n`.
 - `07 30+R` : `MACRO_PRINT_REG_RAW R` — Print integer from register $R$ (no newline).
 - `07 40+R` : `MACRO_CLEAR_REG R` — Zero out register $R$ ($R_i \leftarrow 0$).
 
-### 6. System Syscalls (`Group 0x06`)
+### 6. String & Pattern Processing (`Group 0x0A`)
+- `0A 01`   : `STR_CMP R1, R2` — Compare null-terminated strings starting at `RAM[R0]` and `RAM[R1]`. Push 0 if equal, -1 if less, 1 if greater.
+- `0A 02`   : `STR_FIND R_hay, R_ndl` — Substring search pattern at `RAM[R1]` inside `RAM[R0]`. Push 0-based char index or -1 if not found.
+
+### 7. System Syscalls (`Group 0x06`)
 - `06 01`   : `SYS_TIME` — Push current Unix timestamp (seconds) onto stack.
 - `06 02`   : `SYS_RAND` — Push pseudo-random 15-bit integer ($0..32767$) onto stack.
 - `06 03`   : `SYS_CLOCK` — Push process execution clock in milliseconds onto stack.

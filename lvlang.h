@@ -33,6 +33,7 @@ extern "C" {
 typedef enum {
     LVL_OK                       =  0,
     LVL_STATUS_HALT              =  1,
+    LVL_STATUS_YIELD             =  2,
     LVL_ERR_INVALID_OPCODE       = -1,
     LVL_ERR_STACK_OVERFLOW       = -2,
     LVL_ERR_STACK_UNDERFLOW      = -3,
@@ -55,6 +56,7 @@ typedef struct {
 
     int32_t registers[LVL_NUM_REGISTERS];
     int32_t ram[LVL_RAM_SIZE];
+    size_t trap_ip;
 
     const uint8_t *bytecode;
     size_t bytecode_size;
@@ -116,6 +118,7 @@ void lvl_init(lvl_vm_t *vm, const uint8_t *bytecode, size_t size) {
     vm->sp = 0;
     vm->csp = 0;
     vm->ip = 0;
+    vm->trap_ip = 0;
     vm->bytecode = bytecode;
     vm->bytecode_size = size;
     vm->status = LVL_OK;
@@ -281,7 +284,7 @@ int lvl_step(lvl_vm_t *vm) {
             else vm->status = LVL_ERR_INVALID_OPCODE;
             break;
 
-        /* MODULE 0x04: FLOW CONTROL & SUBROUTINES */
+        /* MODULE 0x04: FLOW CONTROL, SUBROUTINES & TRAPS */
         case 0x04:
             if (b2 == 0x00) {
                 /* RET: Return from subroutine */
@@ -290,6 +293,20 @@ int lvl_step(lvl_vm_t *vm) {
                 } else {
                     vm->status = LVL_ERR_CALL_STACK_UNDERFLOW;
                 }
+            } else if (b2 == 0x01) {
+                /* YIELD: Async coroutine pause */
+                vm->status = LVL_STATUS_YIELD;
+            } else if (b2 == 0x05) {
+                /* SET_TRAP Target: Set Exception Catch Handler */
+                if (vm->ip + 1 < vm->bytecode_size) {
+                    uint8_t low = vm->bytecode[vm->ip++];
+                    uint8_t high = vm->bytecode[vm->ip++];
+                    size_t far_inst = (size_t)(low | (high << 8));
+                    vm->trap_ip = far_inst * 2;
+                }
+            } else if (b2 == 0x06) {
+                /* CLEAR_TRAP: Disable Exception Handler */
+                vm->trap_ip = 0;
             } else if (b2 >= 0x10 && b2 <= 0x4F) {
                 /* JMP Target */
                 target_byte = (size_t)(b2 - 0x10) * 2;
@@ -320,7 +337,7 @@ int lvl_step(lvl_vm_t *vm) {
                     vm->status = LVL_ERR_CALL_STACK_OVERFLOW;
                 }
             } else if (b2 == 0xFC) {
-                /* JZ_FAR: 16-bit Target (Up to 65,536 instructions / 128KB) */
+                /* JZ_FAR: 16-bit Target */
                 if (lvl_pop(vm, &a)) {
                     if (vm->ip + 1 < vm->bytecode_size) {
                         uint8_t low = vm->bytecode[vm->ip++];
@@ -463,7 +480,56 @@ int lvl_step(lvl_vm_t *vm) {
             }
             break;
 
+        /* MODULE 0x0A: STRING & PATTERN PROCESSING */
+        case 0x0A:
+            switch (b2) {
+                case 0x01: {
+                    /* STR_CMP R1, R2: Compare strings starting at RAM[R0] and RAM[R1] */
+                    uint8_t r1 = vm->registers[0] % LVL_RAM_SIZE;
+                    uint8_t r2 = vm->registers[1] % LVL_RAM_SIZE;
+                    int res = 0;
+                    size_t idx = 0;
+                    while (idx < 256) {
+                        char c1 = (char)vm->ram[(r1 + idx) % LVL_RAM_SIZE];
+                        char c2 = (char)vm->ram[(r2 + idx) % LVL_RAM_SIZE];
+                        if (c1 != c2) { res = (c1 < c2) ? -1 : 1; break; }
+                        if (c1 == '\0') break;
+                        idx++;
+                    }
+                    lvl_push(vm, res);
+                    break;
+                }
+                case 0x02: {
+                    /* STR_FIND: Substring search in RAM[R0] for pattern in RAM[R1] */
+                    uint8_t r_hay = vm->registers[0] % LVL_RAM_SIZE;
+                    uint8_t r_ndl = vm->registers[1] % LVL_RAM_SIZE;
+                    char haystack[256] = {0}, needle[256] = {0};
+                    for (size_t i = 0; i < 255; i++) {
+                        haystack[i] = (char)vm->ram[(r_hay + i) % LVL_RAM_SIZE];
+                        if (haystack[i] == '\0') break;
+                    }
+                    for (size_t i = 0; i < 255; i++) {
+                        needle[i] = (char)vm->ram[(r_ndl + i) % LVL_RAM_SIZE];
+                        if (needle[i] == '\0') break;
+                    }
+                    char *found = strstr(haystack, needle);
+                    lvl_push(vm, found ? (int32_t)(found - haystack) : -1);
+                    break;
+                }
+                default:
+                    vm->status = LVL_ERR_INVALID_OPCODE;
+                    break;
+            }
+            break;
+
         default: vm->status = LVL_ERR_INVALID_OPCODE; break;
+    }
+
+    if (vm->status < 0 && vm->trap_ip > 0) {
+        lvl_status_t err = vm->status;
+        vm->status = LVL_OK;
+        lvl_push(vm, (int32_t)err);
+        vm->ip = vm->trap_ip;
     }
 
     return vm->status;
