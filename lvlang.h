@@ -638,66 +638,41 @@ int lvl_step(lvl_vm_t *vm) {
             }
             break;
 
-        /* MODULE 0x09: RELATIVE FLOW CONTROL (AI-OPTIMIZED 2-BYTE RELATIVE JUMPS & CALLS) */
-        case 0x09:
-            if (b2 >= 0x01 && b2 <= 0x1F) {
-                /* JMP_REL_BACK N (1..31 instructions) */
-                size_t n = (size_t)b2;
-                if (vm->ip >= n * 2) vm->ip -= n * 2;
-                else vm->status = LVL_ERR_OUT_OF_BOUNDS;
-            } else if (b2 >= 0x20 && b2 <= 0x3F) {
-                /* JMP_REL_FWD N (1..32 instructions) */
-                size_t n = (size_t)(b2 - 0x20 + 1);
-                if (vm->ip + n * 2 <= vm->bytecode_size) vm->ip += n * 2;
-                else vm->status = LVL_ERR_OUT_OF_BOUNDS;
-            } else if (b2 >= 0x40 && b2 <= 0x5F) {
-                /* JZ_REL_BACK N (1..32 instructions) */
-                size_t n = (size_t)(b2 - 0x40 + 1);
-                if (lvl_pop(vm, &a) && a == 0) {
+        /* MODULE 0x09: RELATIVE JUMPS BACKWARD (09xN -> Jump backward N instructions) */
+        case 0x09: {
+            size_t n = (size_t)b2;
+            if (vm->ip >= n * 2) vm->ip -= n * 2;
+            else vm->status = LVL_ERR_OUT_OF_BOUNDS;
+            break;
+        }
+
+        /* MODULE 0x0B: RELATIVE JUMPS FORWARD (0BxN -> Jump forward N instructions) */
+        case 0x0B: {
+            size_t n = (size_t)b2;
+            if (vm->ip + n * 2 <= vm->bytecode_size) vm->ip += n * 2;
+            else vm->status = LVL_ERR_OUT_OF_BOUNDS;
+            break;
+        }
+
+        /* MODULE 0x0C: CONDITIONAL RELATIVE JUMPS (0Cx01..04 -> JZ/JNZ relative) */
+        case 0x0C: {
+            if (b2 == 0x01) {
+                /* JZ_REL_BACK N: pop count from stack */
+                if (lvl_pop(vm, &b) && lvl_pop(vm, &a) && a == 0) {
+                    size_t n = (size_t)b;
                     if (vm->ip >= n * 2) vm->ip -= n * 2;
                     else vm->status = LVL_ERR_OUT_OF_BOUNDS;
                 }
-            } else if (b2 >= 0x60 && b2 <= 0x7F) {
-                /* JZ_REL_FWD N (1..32 instructions) */
-                size_t n = (size_t)(b2 - 0x60 + 1);
-                if (lvl_pop(vm, &a) && a == 0) {
-                    if (vm->ip + n * 2 <= vm->bytecode_size) vm->ip += n * 2;
-                    else vm->status = LVL_ERR_OUT_OF_BOUNDS;
-                }
-            } else if (b2 >= 0x80 && b2 <= 0x9F) {
-                /* JNZ_REL_BACK N (1..32 instructions) */
-                size_t n = (size_t)(b2 - 0x80 + 1);
-                if (lvl_pop(vm, &a) && a != 0) {
+            } else if (b2 == 0x02) {
+                /* JNZ_REL_BACK N: pop count from stack */
+                if (lvl_pop(vm, &b) && lvl_pop(vm, &a) && a != 0) {
+                    size_t n = (size_t)b;
                     if (vm->ip >= n * 2) vm->ip -= n * 2;
                     else vm->status = LVL_ERR_OUT_OF_BOUNDS;
                 }
-            } else if (b2 >= 0xA0 && b2 <= 0xBF) {
-                /* JNZ_REL_FWD N (1..32 instructions) */
-                size_t n = (size_t)(b2 - 0xA0 + 1);
-                if (lvl_pop(vm, &a) && a != 0) {
-                    if (vm->ip + n * 2 <= vm->bytecode_size) vm->ip += n * 2;
-                    else vm->status = LVL_ERR_OUT_OF_BOUNDS;
-                }
-            } else if (b2 >= 0xC0 && b2 <= 0xDF) {
-                /* CALL_REL_BACK N (1..32 instructions) */
-                size_t n = (size_t)(b2 - 0xC0 + 1);
-                if (vm->csp < LVL_CALL_STACK_SIZE) {
-                    vm->call_stack[vm->csp++] = vm->ip;
-                    if (vm->ip >= n * 2) vm->ip -= n * 2;
-                    else vm->status = LVL_ERR_OUT_OF_BOUNDS;
-                } else vm->status = LVL_ERR_CALL_STACK_OVERFLOW;
-            } else if (b2 >= 0xE0 && b2 <= 0xFF) {
-                /* CALL_REL_FWD N (1..32 instructions) */
-                size_t n = (size_t)(b2 - 0xE0 + 1);
-                if (vm->csp < LVL_CALL_STACK_SIZE) {
-                    vm->call_stack[vm->csp++] = vm->ip;
-                    if (vm->ip + n * 2 <= vm->bytecode_size) vm->ip += n * 2;
-                    else vm->status = LVL_ERR_OUT_OF_BOUNDS;
-                } else vm->status = LVL_ERR_CALL_STACK_OVERFLOW;
-            } else {
-                vm->status = LVL_ERR_INVALID_OPCODE;
             }
             break;
+        }
 
         /* MODULE 0x0A: STRING & PATTERN PROCESSING */
         case 0x0A:
