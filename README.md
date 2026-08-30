@@ -14,6 +14,7 @@
 - 🔐 **Cryptography Plugin**: [dotdok132/lvlang-crypto](https://github.com/dotdok132/lvlang-crypto) (`LibID 0x02` — SHA256 & AES)
 - 🖥️ **System OS Plugin**: [dotdok132/lvlang-system](https://github.com/dotdok132/lvlang-system) (`LibID 0x03` — Shell Commands, File I/O, Env Vars)
 - ⌨️ **Keyboard Interaction Plugin**: [dotdok132/lvlang-keyboard](https://github.com/dotdok132/lvlang-keyboard) (`LibID 0x05` — Keypress Polling, Key State Checks, Line Input)
+- 🎮 **SDL2 2D Graphics Engine Plugin**: [dotdok132/lvlang-sdl2](https://github.com/dotdok132/lvlang-sdl2) (`LibID 0x06` — 2D Windowing, Hardware Acceleration, Color Rects, Frame Present)
 
 ---
 
