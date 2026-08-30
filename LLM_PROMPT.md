@@ -90,11 +90,13 @@ You are an expert compiler agent for **LVLang** — a zero-overhead, 2-byte alig
 - `08 02`   : `VEC_ADD_4D` — **Vector Addition**: $R_0..R_3 \leftarrow R_0..R_3 + R_4..R_7$.
 - `08 03`   : `VEC_SCALE_4D` — **Vector Scaling**: Pop scalar $S$, multiply $R_0..R_3 \leftarrow R_0..R_3 \times S$.
 
-### 8. I/O & System (`Group 0x05`)
+### 8. I/O & User Input (`Group 0x05`)
 - `05 01`   : `PRINT_NUM` — Pop and print integer from stack top.
 - `05 02`   : `PRINT_CHAR` — Pop and print ASCII char from stack top.
 - `05 03`   : `PRINT_STR` — Inline null-terminated string bytes follow immediately: `[05 03] [ASCII Bytes...] [00] [00 alignment byte if needed]`.
 - `05 04`   : `PRINT_NL` — Print newline character `\n`.
+- `05 05`   : `READ_NUM` — **Interactive User Input**: Pause VM, read 32-bit integer from user (keyboard/stdin) and push to stack.
+- `05 06`   : `READ_CHAR` — **Interactive Char Input**: Pause VM, read 1 ASCII char from user and push to stack.
 - `05 FF`   : `HALT` — Clean execution halt.
 
 ---

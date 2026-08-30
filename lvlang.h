@@ -522,6 +522,20 @@ int lvl_step(lvl_vm_t *vm) {
                     if (vm->ip % 2 != 0) vm->ip++;
                     break;
                 case 0x04: if (vm->print_char) vm->print_char('\n'); break;
+                case 0x05: {
+                    int32_t val = 0;
+                    if (scanf("%d", &val) == 1) {
+                        lvl_push(vm, val);
+                    } else {
+                        lvl_push(vm, 0);
+                    }
+                    break;
+                }
+                case 0x06: {
+                    int ch = getchar();
+                    lvl_push(vm, (int32_t)(ch != EOF ? ch : 0));
+                    break;
+                }
                 case 0xFF: vm->status = LVL_STATUS_HALT; break;
                 default: vm->status = LVL_ERR_INVALID_OPCODE; break;
             }

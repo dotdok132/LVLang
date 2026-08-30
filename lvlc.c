@@ -114,7 +114,9 @@ int main(int argc, char **argv) {
             fprintf(stderr, "Error: Unable to parse hex stream or open file '%s'\n", target);
             return 1;
         }
-        printf("[+] Loaded %zu bytes directly from hex stream.\n", bytecode_size);
+    printf("[+] Loaded %zu bytes directly from hex stream: ", bytecode_size);
+    for (size_t i = 0; i < bytecode_size; i++) printf("%02X ", bytecode[i]);
+    printf("\n");
     }
 
     if (bytecode_size % 2 != 0) {
