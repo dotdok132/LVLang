@@ -29,17 +29,20 @@ Standard programming languages (Python, JavaScript, C) are designed for humans t
 
 Every instruction occupies **strictly 2 bytes**: `[Opcode: 1 Byte] [Operand/Reg: 1 Byte]`.
 
-### 1. Stack & Register Management (`0x01`)
+### 1. Stack, Registers & RAM Memory (`0x01`)
 | Opcode (Hex) | Operand (Hex) | Name | Description |
 |---|---|---|---|
-| `0x01` | `0x80 + N` | `PUSH_IMM` | Push 7-bit immediate integer $N$ onto stack |
+| `0x01` | `0x80 + N` | `PUSH_IMM` | Push 7-bit integer $N$ onto data stack |
+| `0x01` | `0x04 [4 Bytes]` | `PUSH_INT32` | **32-Bit Integer**: Push full signed 32-bit integer ($\pm 2.14 \times 10^9$) |
 | `0x01` | `0x01` | `POP` | Pop top of data stack |
 | `0x01` | `0x02` | `DUP` | Duplicate top element of stack |
 | `0x01` | `0x03` | `SWAP` | Swap top two elements of stack |
 | `0x01` | `0x10 + R` | `LOAD_REG` | Load register $R_0..R_{15}$ onto data stack |
 | `0x01` | `0x30 + R` | `STORE_REG` | Store data stack top into register $R_0..R_{15}$ |
+| `0x01` | `0x40 + R` | `LOAD_RAM` | **RAM Memory**: Push `RAM[R_idx]` ($0..1023$) onto data stack |
+| `0x01` | `0x50 + R` | `STORE_RAM` | **RAM Memory**: Pop stack top into `RAM[R_idx]` ($0..1023$) |
 
-### 2. Arithmetic (`0x02`)
+### 2. Integer & Float Arithmetic (`0x02`)
 | Opcode (Hex) | Operand (Hex) | Name | Description |
 |---|---|---|---|
 | `0x02` | `0x01` | `ADD` | Pop $b, a$; push $a + b$ |
@@ -49,6 +52,10 @@ Every instruction occupies **strictly 2 bytes**: `[Opcode: 1 Byte] [Operand/Reg:
 | `0x02` | `0x05` | `MOD` | Pop $b, a$; push $a \pmod b$ |
 | `0x02` | `0x10 + R` | `INC_REG` | Increment register $R_0..R_{15}$ ($R_i \leftarrow R_i + 1$) |
 | `0x02` | `0x20 + R` | `DEC_REG` | Decrement register $R_0..R_{15}$ ($R_i \leftarrow R_i - 1$) |
+| `0x02` | `0x40` | `FADD` | **Float Math**: IEEE 754 float addition ($a + b$) |
+| `0x02` | `0x41` | `FSUB` | **Float Math**: IEEE 754 float subtraction ($a - b$) |
+| `0x02` | `0x42` | `FMUL` | **Float Math**: IEEE 754 float multiplication ($a \times b$) |
+| `0x02` | `0x43` | `FDIV` | **Float Math**: IEEE 754 float division ($a / b$) |
 
 ### 3. Comparison & Logic (`0x03`)
 | Opcode (Hex) | Operand (Hex) | Name | Description |
@@ -60,14 +67,18 @@ Every instruction occupies **strictly 2 bytes**: `[Opcode: 1 Byte] [Operand/Reg:
 | `0x03` | `0x05` | `GTE` | Push $1$ if $a \ge b$ else $0$ |
 | `0x03` | `0x06` | `LTE` | Push $1$ if $a \le b$ else $0$ |
 
-### 4. Control Flow & Subroutines (`0x04`)
+### 4. Control Flow, Subroutines & Far Jumps (`0x04`)
 | Opcode (Hex) | Operand (Hex) | Name | Description |
 |---|---|---|---|
-| `0x04` | `0x10 + Target` | `JMP` | Unconditional jump to 16-bit instruction index `Target` |
+| `0x04` | `0x10 + Target` | `JMP` | Jump to instruction index `Target` ($0..63$) |
 | `0x04` | `0x50 + Target` | `JZ` | Jump to `Target` if stack top $== 0$ |
 | `0x04` | `0x90 + Target` | `JNZ` | Jump to `Target` if stack top $\neq 0$ |
-| `0x04` | `0xD0 + Target` | `CALL` | **Macro Subroutine Call**: Push return `ip`, jump to `Target` |
-| `0x04` | `0x00` | `RET` | **Return from Subroutine**: Pop return `ip` and resume |
+| `0x04` | `0xD0 + Target` | `CALL` | **Subroutine Call**: Push return `ip`, jump to `Target` |
+| `0x04` | `0x00` | `RET` | **Subroutine Return**: Pop return `ip` and resume |
+| `0x04` | `0xFE [Low High]` | `JMP_FAR` | **16-Bit Long Jump**: Unconditional jump to index $0..65,535$ (Up to 128KB program) |
+| `0x04` | `0xFF [Low High]` | `CALL_FAR` | **16-Bit Long Subroutine Call**: Push return `ip`, jump to index $0..65,535$ |
+| `0x04` | `0xFC [Low High]` | `JZ_FAR` | **16-Bit Long Jump If Zero** |
+| `0x04` | `0xFD [Low High]` | `JNZ_FAR` | **16-Bit Long Jump If Not Zero** |
 
 ### 5. Macro Shortcut Opcodes (`0x07` — 1-Command Abbreviations)
 | Opcode (Hex) | Operand (Hex) | Name | Description |

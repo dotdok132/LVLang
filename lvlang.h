@@ -26,6 +26,10 @@ extern "C" {
 #define LVL_NUM_REGISTERS 16
 #endif
 
+#ifndef LVL_RAM_SIZE
+#define LVL_RAM_SIZE 1024
+#endif
+
 typedef enum {
     LVL_OK                       =  0,
     LVL_STATUS_HALT              =  1,
@@ -50,6 +54,7 @@ typedef struct {
     size_t csp;
 
     int32_t registers[LVL_NUM_REGISTERS];
+    int32_t ram[LVL_RAM_SIZE];
 
     const uint8_t *bytecode;
     size_t bytecode_size;
@@ -116,6 +121,7 @@ void lvl_init(lvl_vm_t *vm, const uint8_t *bytecode, size_t size) {
     vm->status = LVL_OK;
 
     for (size_t i = 0; i < LVL_NUM_REGISTERS; i++) vm->registers[i] = 0;
+    for (size_t i = 0; i < LVL_RAM_SIZE; i++) vm->ram[i] = 0;
     for (size_t i = 0; i < LVL_STACK_SIZE; i++) vm->stack[i] = 0;
     for (size_t i = 0; i < LVL_CALL_STACK_SIZE; i++) vm->call_stack[i] = 0;
 
@@ -141,42 +147,71 @@ static inline bool lvl_pop(lvl_vm_t *vm, int32_t *out_val) {
     return true;
 }
 
+static inline int32_t lvl_float_to_raw(float f) {
+    union { float f; int32_t i; } u;
+    u.f = f;
+    return u.i;
+}
+
+static inline float lvl_raw_to_float(int32_t i) {
+    union { float f; int32_t i; } u;
+    u.i = i;
+    return u.f;
+}
+
 int lvl_step(lvl_vm_t *vm) {
-    if (!vm) return LVL_ERR_OUT_OF_BOUNDS;
-    if (vm->status != LVL_OK) return vm->status;
-
+    if (!vm || vm->status != LVL_OK) return vm->status;
     if (vm->ip + 1 >= vm->bytecode_size) {
-        vm->status = LVL_ERR_OUT_OF_BOUNDS;
-        return vm->status;
-    }
-
-    uint8_t b1 = vm->bytecode[vm->ip];
-    uint8_t b2 = vm->bytecode[vm->ip + 1];
-    vm->ip += 2;
-
-    if ((b1 == 0xFF && b2 == 0xFF) || (b1 == 0x05 && b2 == 0xFF)) {
         vm->status = LVL_STATUS_HALT;
         return vm->status;
     }
 
-    int32_t a, b;
-    size_t target_byte;
+    uint8_t b1 = vm->bytecode[vm->ip++];
+    uint8_t b2 = vm->bytecode[vm->ip++];
+
+    int32_t a = 0, b = 0;
+    size_t target_byte = 0;
 
     switch (b1) {
-        /* MODULE 0x01: STACK & REGISTERS */
+        /* MODULE 0x01: STACK, REGISTERS & RAM MEMORY */
         case 0x01:
-            if (b2 == 0x00) lvl_push(vm, 0);
-            else if (b2 == 0x01) lvl_pop(vm, &a);
-            else if (b2 == 0x02) { if (lvl_pop(vm, &a)) { lvl_push(vm, a); lvl_push(vm, a); } }
-            else if (b2 == 0x03) { if (lvl_pop(vm, &b) && lvl_pop(vm, &a)) { lvl_push(vm, b); lvl_push(vm, a); } }
-            else if (b2 >= 0x10 && b2 <= 0x1F) {
+            if (b2 >= 0x80) {
+                /* PUSH_IMM 7-bit */
+                lvl_push(vm, (int32_t)(b2 & 0x7F));
+            } else if (b2 == 0x04) {
+                /* PUSH_INT32: 32-bit Extended Immediate Integer */
+                if (vm->ip + 3 < vm->bytecode_size) {
+                    uint8_t u0 = vm->bytecode[vm->ip++];
+                    uint8_t u1 = vm->bytecode[vm->ip++];
+                    uint8_t u2 = vm->bytecode[vm->ip++];
+                    uint8_t u3 = vm->bytecode[vm->ip++];
+                    int32_t val32 = (int32_t)((uint32_t)u0 | ((uint32_t)u1 << 8) | ((uint32_t)u2 << 16) | ((uint32_t)u3 << 24));
+                    lvl_push(vm, val32);
+                } else {
+                    vm->status = LVL_ERR_OUT_OF_BOUNDS;
+                }
+            } else if (b2 == 0x01) {
+                lvl_pop(vm, &a);
+            } else if (b2 == 0x02) {
+                if (lvl_pop(vm, &a)) { lvl_push(vm, a); lvl_push(vm, a); }
+            } else if (b2 == 0x03) {
+                if (lvl_pop(vm, &b) && lvl_pop(vm, &a)) { lvl_push(vm, b); lvl_push(vm, a); }
+            } else if (b2 >= 0x10 && b2 <= 0x1F) {
                 uint8_t reg = b2 - 0x10;
                 lvl_push(vm, vm->registers[reg]);
             } else if (b2 >= 0x30 && b2 <= 0x3F) {
                 uint8_t reg = b2 - 0x30;
                 if (lvl_pop(vm, &a)) vm->registers[reg] = a;
-            } else if (b2 >= 0x80) {
-                lvl_push(vm, (int32_t)(b2 - 0x80));
+            } else if (b2 >= 0x40 && b2 <= 0x4F) {
+                /* LOAD_RAM R: Push RAM[R_idx] onto stack */
+                uint8_t reg = b2 - 0x40;
+                size_t ram_idx = (size_t)(vm->registers[reg] >= 0 ? vm->registers[reg] : 0) % LVL_RAM_SIZE;
+                lvl_push(vm, vm->ram[ram_idx]);
+            } else if (b2 >= 0x50 && b2 <= 0x5F) {
+                /* STORE_RAM R: Pop value into RAM[R_idx] */
+                uint8_t reg = b2 - 0x50;
+                size_t ram_idx = (size_t)(vm->registers[reg] >= 0 ? vm->registers[reg] : 0) % LVL_RAM_SIZE;
+                if (lvl_pop(vm, &a)) vm->ram[ram_idx] = a;
             } else {
                 vm->status = LVL_ERR_INVALID_OPCODE;
             }
@@ -203,6 +238,30 @@ int lvl_step(lvl_vm_t *vm) {
             } else if (b2 >= 0x20 && b2 <= 0x2F) {
                 uint8_t reg = b2 - 0x20;
                 vm->registers[reg]--;
+            } else if (b2 == 0x40) {
+                /* FADD: IEEE 754 Float Addition */
+                if (lvl_pop(vm, &b) && lvl_pop(vm, &a)) {
+                    float res = lvl_raw_to_float(a) + lvl_raw_to_float(b);
+                    lvl_push(vm, lvl_float_to_raw(res));
+                }
+            } else if (b2 == 0x41) {
+                /* FSUB: IEEE 754 Float Subtraction */
+                if (lvl_pop(vm, &b) && lvl_pop(vm, &a)) {
+                    float res = lvl_raw_to_float(a) - lvl_raw_to_float(b);
+                    lvl_push(vm, lvl_float_to_raw(res));
+                }
+            } else if (b2 == 0x42) {
+                /* FMUL: IEEE 754 Float Multiplication */
+                if (lvl_pop(vm, &b) && lvl_pop(vm, &a)) {
+                    float res = lvl_raw_to_float(a) * lvl_raw_to_float(b);
+                    lvl_push(vm, lvl_float_to_raw(res));
+                }
+            } else if (b2 == 0x43) {
+                /* FDIV: IEEE 754 Float Division */
+                if (lvl_pop(vm, &b) && lvl_pop(vm, &a)) {
+                    float res = lvl_raw_to_float(a) / lvl_raw_to_float(b);
+                    lvl_push(vm, lvl_float_to_raw(res));
+                }
             } else {
                 vm->status = LVL_ERR_INVALID_OPCODE;
             }
@@ -250,7 +309,7 @@ int lvl_step(lvl_vm_t *vm) {
                     if (target_byte < vm->bytecode_size) vm->ip = target_byte;
                     else vm->status = LVL_ERR_OUT_OF_BOUNDS;
                 }
-            } else if (b2 >= 0xD0 && b2 <= 0xFD) {
+            } else if (b2 >= 0xD0 && b2 <= 0xFB) {
                 /* CALL Target: Macro / Subroutine Call */
                 if (vm->csp < LVL_CALL_STACK_SIZE) {
                     vm->call_stack[vm->csp++] = vm->ip;
@@ -260,6 +319,49 @@ int lvl_step(lvl_vm_t *vm) {
                 } else {
                     vm->status = LVL_ERR_CALL_STACK_OVERFLOW;
                 }
+            } else if (b2 == 0xFC) {
+                /* JZ_FAR: 16-bit Target (Up to 65,536 instructions / 128KB) */
+                if (lvl_pop(vm, &a)) {
+                    if (vm->ip + 1 < vm->bytecode_size) {
+                        uint8_t low = vm->bytecode[vm->ip++];
+                        uint8_t high = vm->bytecode[vm->ip++];
+                        if (a == 0) {
+                            size_t far_inst = (size_t)(low | (high << 8));
+                            vm->ip = far_inst * 2;
+                        }
+                    } else vm->status = LVL_ERR_OUT_OF_BOUNDS;
+                }
+            } else if (b2 == 0xFD) {
+                /* JNZ_FAR: 16-bit Target */
+                if (lvl_pop(vm, &a)) {
+                    if (vm->ip + 1 < vm->bytecode_size) {
+                        uint8_t low = vm->bytecode[vm->ip++];
+                        uint8_t high = vm->bytecode[vm->ip++];
+                        if (a != 0) {
+                            size_t far_inst = (size_t)(low | (high << 8));
+                            vm->ip = far_inst * 2;
+                        }
+                    } else vm->status = LVL_ERR_OUT_OF_BOUNDS;
+                }
+            } else if (b2 == 0xFE) {
+                /* JMP_FAR: 16-bit Target */
+                if (vm->ip + 1 < vm->bytecode_size) {
+                    uint8_t low = vm->bytecode[vm->ip++];
+                    uint8_t high = vm->bytecode[vm->ip++];
+                    size_t far_inst = (size_t)(low | (high << 8));
+                    vm->ip = far_inst * 2;
+                } else vm->status = LVL_ERR_OUT_OF_BOUNDS;
+            } else if (b2 == 0xFF) {
+                /* CALL_FAR: 16-bit Target */
+                if (vm->ip + 1 < vm->bytecode_size) {
+                    uint8_t low = vm->bytecode[vm->ip++];
+                    uint8_t high = vm->bytecode[vm->ip++];
+                    if (vm->csp < LVL_CALL_STACK_SIZE) {
+                        vm->call_stack[vm->csp++] = vm->ip;
+                        size_t far_inst = (size_t)(low | (high << 8));
+                        vm->ip = far_inst * 2;
+                    } else vm->status = LVL_ERR_CALL_STACK_OVERFLOW;
+                } else vm->status = LVL_ERR_OUT_OF_BOUNDS;
             } else {
                 vm->status = LVL_ERR_INVALID_OPCODE;
             }
