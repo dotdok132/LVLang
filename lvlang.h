@@ -44,10 +44,23 @@ typedef enum {
     LVL_ERR_COMPILATION_FAILED   = -8
 } lvl_status_t;
 
+#ifndef LVL_MAX_FFI_FUNCS
+#define LVL_MAX_FFI_FUNCS 64
+#endif
+
+struct lvl_vm;
+typedef void (*lvl_native_fn)(struct lvl_vm *vm);
+
+typedef struct {
+    uint8_t lib_id;
+    uint8_t func_id;
+    lvl_native_fn fn;
+} LvlFFIFunc;
+
 typedef void (*lvl_print_num_fn)(int32_t val);
 typedef void (*lvl_print_char_fn)(char c);
 
-typedef struct {
+typedef struct lvl_vm {
     int32_t stack[LVL_STACK_SIZE];
     size_t sp;
 
@@ -57,6 +70,9 @@ typedef struct {
     int32_t registers[LVL_NUM_REGISTERS];
     int32_t ram[LVL_RAM_SIZE];
     size_t trap_ip;
+
+    LvlFFIFunc ffi_table[LVL_MAX_FFI_FUNCS];
+    size_t ffi_count;
 
     const uint8_t *bytecode;
     size_t bytecode_size;
@@ -69,6 +85,7 @@ typedef struct {
 } lvl_vm_t;
 
 void lvl_init(lvl_vm_t *vm, const uint8_t *bytecode, size_t size);
+int  lvl_register_ffi(lvl_vm_t *vm, uint8_t lib_id, uint8_t func_id, lvl_native_fn fn);
 int  lvl_step(lvl_vm_t *vm);
 int  lvl_run(lvl_vm_t *vm);
 
@@ -89,7 +106,8 @@ int lvl_compile(const char *source, uint8_t *out_bytecode, size_t *out_size);
 /*                              IMPLEMENTATION                                */
 /* ========================================================================== */
 
-#ifdef LVLANG_IMPLEMENTATION
+#if defined(LVLANG_IMPLEMENTATION) && !defined(LVLANG_IMPLEMENTATION_GUARD)
+#define LVLANG_IMPLEMENTATION_GUARD
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -119,6 +137,7 @@ void lvl_init(lvl_vm_t *vm, const uint8_t *bytecode, size_t size) {
     vm->csp = 0;
     vm->ip = 0;
     vm->trap_ip = 0;
+    vm->ffi_count = 0;
     vm->bytecode = bytecode;
     vm->bytecode_size = size;
     vm->status = LVL_OK;
@@ -130,6 +149,15 @@ void lvl_init(lvl_vm_t *vm, const uint8_t *bytecode, size_t size) {
 
     vm->print_num = lvl_default_print_num;
     vm->print_char = lvl_default_print_char;
+}
+
+int lvl_register_ffi(lvl_vm_t *vm, uint8_t lib_id, uint8_t func_id, lvl_native_fn fn) {
+    if (!vm || !fn || vm->ffi_count >= LVL_MAX_FFI_FUNCS) return -1;
+    vm->ffi_table[vm->ffi_count].lib_id = lib_id;
+    vm->ffi_table[vm->ffi_count].func_id = func_id;
+    vm->ffi_table[vm->ffi_count].fn = fn;
+    vm->ffi_count++;
+    return 0;
 }
 
 static inline bool lvl_push(lvl_vm_t *vm, int32_t val) {
@@ -519,6 +547,28 @@ int lvl_step(lvl_vm_t *vm) {
                 default:
                     vm->status = LVL_ERR_INVALID_OPCODE;
                     break;
+            }
+            break;
+
+        /* MODULE 0x0E: EXTERNAL LIBRARIES & NATIVE FFI PLUGINS */
+        case 0x0E:
+            if (b2 == 0x01) {
+                /* FFI_CALL [LibID] [FuncID] */
+                if (vm->ip + 1 < vm->bytecode_size) {
+                    uint8_t lib_id = vm->bytecode[vm->ip++];
+                    uint8_t func_id = vm->bytecode[vm->ip++];
+                    bool found = false;
+                    for (size_t f = 0; f < vm->ffi_count; f++) {
+                        if (vm->ffi_table[f].lib_id == lib_id && vm->ffi_table[f].func_id == func_id) {
+                            vm->ffi_table[f].fn(vm);
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) vm->status = LVL_ERR_INVALID_OPCODE;
+                } else vm->status = LVL_ERR_OUT_OF_BOUNDS;
+            } else {
+                vm->status = LVL_ERR_INVALID_OPCODE;
             }
             break;
 

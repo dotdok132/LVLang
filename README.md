@@ -94,7 +94,12 @@ Every instruction occupies **strictly 2 bytes**: `[Opcode: 1 Byte] [Operand/Reg:
 | `0x0A` | `0x01` | `STR_CMP` | Compare strings at `RAM[R0]` and `RAM[R1]` -> Push 0, -1, 1 |
 | `0x0A` | `0x02` | `STR_FIND` | Search pattern `RAM[R1]` in `RAM[R0]` -> Push 0-based char index or -1 |
 
-### 7. System Syscalls (`0x06`)
+### 7. External 3rd-Party Libraries & FFI Plugins (`0x0E`)
+| Opcode (Hex) | Operand (Hex) | Name | Description |
+|---|---|---|---|
+| `0x0E` | `0x01 [LibID] [FuncID]` | `FFI_CALL` | Execute registered 3rd-party C/C++/Python dynamic library function |
+
+### 8. System Syscalls (`0x06`)
 | Opcode (Hex) | Operand (Hex) | Name | Description |
 |---|---|---|---|
 | `0x06` | `0x01` | `SYS_TIME` | Push current Unix epoch timestamp in seconds onto stack |

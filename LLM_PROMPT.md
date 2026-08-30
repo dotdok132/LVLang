@@ -65,7 +65,10 @@ You are an expert compiler agent for **LVLang** — a zero-overhead, 2-byte alig
 - `0A 01`   : `STR_CMP R1, R2` — Compare null-terminated strings starting at `RAM[R0]` and `RAM[R1]`. Push 0 if equal, -1 if less, 1 if greater.
 - `0A 02`   : `STR_FIND R_hay, R_ndl` — Substring search pattern at `RAM[R1]` inside `RAM[R0]`. Push 0-based char index or -1 if not found.
 
-### 7. System Syscalls (`Group 0x06`)
+### 7. External 3rd-Party Libraries & FFI Plugins (`Group 0x0E`)
+- `0E 01 [LibID] [FuncID]` : `FFI_CALL LibID, FuncID` — **External Library Call**: Execute native C/C++/Python 3rd-party plugin function registered in host environment.
+
+### 8. System Syscalls (`Group 0x06`)
 - `06 01`   : `SYS_TIME` — Push current Unix timestamp (seconds) onto stack.
 - `06 02`   : `SYS_RAND` — Push pseudo-random 15-bit integer ($0..32767$) onto stack.
 - `06 03`   : `SYS_CLOCK` — Push process execution clock in milliseconds onto stack.
