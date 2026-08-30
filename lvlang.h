@@ -66,6 +66,10 @@ typedef struct {
 typedef void (*lvl_print_num_fn)(int32_t val);
 typedef void (*lvl_print_char_fn)(char c);
 
+#ifndef LVL_MAX_MACROS
+#define LVL_MAX_MACROS 32
+#endif
+
 typedef struct lvl_vm {
     int32_t stack[LVL_STACK_SIZE];
     size_t sp;
@@ -76,6 +80,8 @@ typedef struct lvl_vm {
     int32_t registers[LVL_NUM_REGISTERS];
     int32_t ram[LVL_RAM_SIZE];
     size_t trap_ip;
+
+    size_t macro_table[LVL_MAX_MACROS];
 
     LvlFFIFunc ffi_table[LVL_MAX_FFI_FUNCS];
     size_t ffi_count;
@@ -156,6 +162,7 @@ void lvl_init(lvl_vm_t *vm, const uint8_t *bytecode, size_t size) {
     for (size_t i = 0; i < LVL_RAM_SIZE; i++) vm->ram[i] = 0;
     for (size_t i = 0; i < LVL_STACK_SIZE; i++) vm->stack[i] = 0;
     for (size_t i = 0; i < LVL_CALL_STACK_SIZE; i++) vm->call_stack[i] = 0;
+    for (size_t i = 0; i < LVL_MAX_MACROS; i++) vm->macro_table[i] = 0;
     for (size_t i = 0; i < LVL_MAX_HEAP_CHUNKS; i++) {
         vm->heap_chunks[i] = NULL;
         vm->heap_chunk_sizes[i] = 0;
@@ -541,7 +548,7 @@ int lvl_step(lvl_vm_t *vm) {
             }
             break;
 
-        /* MODULE 0x07: MACRO / SHORTCUT OPCODES */
+        /* MODULE 0x07: MACRO / SHORTCUT OPCODES & DYNAMIC USER MACROS */
         case 0x07:
             if (b2 >= 0x10 && b2 <= 0x1F) {
                 /* MACRO_PRINT_REG (0x10 + R): Load R, PRINT_NUM, PRINT_NL */
@@ -558,6 +565,32 @@ int lvl_step(lvl_vm_t *vm) {
                 /* MACRO_CLEAR_REG (0x40 + R): Clear R to 0 */
                 uint8_t reg = b2 - 0x40;
                 vm->registers[reg] = 0;
+            } else if (b2 >= 0x70 && b2 <= 0x7F) {
+                /* DEF_MACRO ID (0x70 + ID): Register macro start, skip body until RET (0x04 0x00) */
+                uint8_t macro_id = b2 - 0x70;
+                vm->macro_table[macro_id] = vm->ip;
+                while (vm->ip + 1 < vm->bytecode_size) {
+                    uint8_t op1 = vm->bytecode[vm->ip++];
+                    uint8_t op2 = vm->bytecode[vm->ip++];
+                    if (op1 == 0x04 && op2 == 0x00) {
+                        break;
+                    }
+                    if (op1 == 0x01 && op2 == 0x04) vm->ip += 4;
+                    else if (op1 == 0x05 && op2 == 0x03) {
+                        while (vm->ip < vm->bytecode_size && vm->bytecode[vm->ip] != 0) vm->ip++;
+                        if (vm->ip < vm->bytecode_size) vm->ip++;
+                        if (vm->ip % 2 != 0) vm->ip++;
+                    }
+                }
+            } else if (b2 >= 0x80 && b2 <= 0x8F) {
+                /* EXEC_MACRO ID (0x80 + ID): Call registered macro in 1 instruction */
+                uint8_t macro_id = b2 - 0x80;
+                if (vm->csp < LVL_CALL_STACK_SIZE) {
+                    vm->call_stack[vm->csp++] = vm->ip;
+                    vm->ip = vm->macro_table[macro_id];
+                } else {
+                    vm->status = LVL_ERR_CALL_STACK_OVERFLOW;
+                }
             } else {
                 vm->status = LVL_ERR_INVALID_OPCODE;
             }
@@ -597,7 +630,7 @@ int lvl_step(lvl_vm_t *vm) {
             }
             break;
 
-        /* MODULE 0x09: RELATIVE FLOW CONTROL (AI-OPTIMIZED 2-BYTE RELATIVE JUMPS) */
+        /* MODULE 0x09: RELATIVE FLOW CONTROL (AI-OPTIMIZED 2-BYTE RELATIVE JUMPS & CALLS) */
         case 0x09:
             if (b2 >= 0x01 && b2 <= 0x1F) {
                 /* JMP_REL_BACK N (1..31 instructions) */
@@ -637,6 +670,22 @@ int lvl_step(lvl_vm_t *vm) {
                     if (vm->ip + n * 2 <= vm->bytecode_size) vm->ip += n * 2;
                     else vm->status = LVL_ERR_OUT_OF_BOUNDS;
                 }
+            } else if (b2 >= 0xC0 && b2 <= 0xDF) {
+                /* CALL_REL_BACK N (1..32 instructions) */
+                size_t n = (size_t)(b2 - 0xC0 + 1);
+                if (vm->csp < LVL_CALL_STACK_SIZE) {
+                    vm->call_stack[vm->csp++] = vm->ip;
+                    if (vm->ip >= n * 2) vm->ip -= n * 2;
+                    else vm->status = LVL_ERR_OUT_OF_BOUNDS;
+                } else vm->status = LVL_ERR_CALL_STACK_OVERFLOW;
+            } else if (b2 >= 0xE0 && b2 <= 0xFF) {
+                /* CALL_REL_FWD N (1..32 instructions) */
+                size_t n = (size_t)(b2 - 0xE0 + 1);
+                if (vm->csp < LVL_CALL_STACK_SIZE) {
+                    vm->call_stack[vm->csp++] = vm->ip;
+                    if (vm->ip + n * 2 <= vm->bytecode_size) vm->ip += n * 2;
+                    else vm->status = LVL_ERR_OUT_OF_BOUNDS;
+                } else vm->status = LVL_ERR_CALL_STACK_OVERFLOW;
             } else {
                 vm->status = LVL_ERR_INVALID_OPCODE;
             }
