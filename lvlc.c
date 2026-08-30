@@ -187,12 +187,20 @@ int main(int argc, char **argv) {
     }
 
     bool validate_only = false;
+    bool trace_execution = false;
     int arg_idx = 1;
     if (strcmp(argv[1], "--validate") == 0 || strcmp(argv[1], "--disasm") == 0) {
         validate_only = true;
         arg_idx = 2;
         if (argc < 3) {
             printf("Usage: %s --validate \"<hex stream>\"\n", argv[0]);
+            return 1;
+        }
+    } else if (strcmp(argv[1], "--trace") == 0) {
+        trace_execution = true;
+        arg_idx = 2;
+        if (argc < 3) {
+            printf("Usage: %s --trace \"<hex stream>\"\n", argv[0]);
             return 1;
         }
     }
@@ -238,7 +246,25 @@ int main(int argc, char **argv) {
     lvl_plugin_crypto_init(&vm);
     lvl_plugin_keyboard_init(&vm);
     lvl_plugin_sdl2_init(&vm);
-    lvl_run(&vm);
+
+    if (trace_execution) {
+        printf("\n--- SINGLE-STEP VM EXECUTION TRACE ---\n");
+        size_t step_count = 0;
+        while (vm.status == LVL_OK && vm.ip < vm.bytecode_size) {
+            size_t cur_ip = vm.ip;
+            uint8_t op1 = vm.bytecode[cur_ip];
+            uint8_t op2 = (cur_ip + 1 < vm.bytecode_size) ? vm.bytecode[cur_ip + 1] : 0;
+            printf("Step %4zu | IP %4zu: [%02X %02X] | SP: %d | CSP: %zu\n",
+                   step_count++, cur_ip, op1, op2, vm.sp, vm.csp);
+            lvl_step(&vm);
+            if (step_count > 5000) {
+                printf("[TRACE LIMIT REACHED] Stopped trace after 5000 steps.\n");
+                break;
+            }
+        }
+    } else {
+        lvl_run(&vm);
+    }
 
     printf("\n[VM Halted] Exit Status: %d (IP: %zu)\n", lvl_get_status(&vm), vm.ip);
     return 0;
