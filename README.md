@@ -1,16 +1,28 @@
 # LVLang (Low-Velocity / Low-Latency Machine Language for AI)
 
-**LVLang** is an ultra-dense, zero-overhead binary bytecode format and pure C99 runtime engine specifically engineered for AI Agent communication, execution, and extreme token efficiency.
+[![GitHub Engine](https://img.shields.io/badge/Repository-LVLang-blue.svg)](https://github.com/dotdok132/LVLang)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![C99 Standard](https://img.shields.io/badge/C-C99-green.svg)](https://en.wikipedia.org/wiki/C99)
+
+**LVLang** is an ultra-dense, zero-overhead machine language, native x86-64 JIT compiler, and pure C99 runtime engine specifically engineered for AI Agent communication, execution, and extreme token efficiency.
+
+---
+
+## 🌐 Official Ecosystem Repositories
+
+- ⚡ **Core Engine & JIT Runtime**: [dotdok132/LVLang](https://github.com/dotdok132/LVLang)
+- 🔐 **Cryptography Plugin**: [dotdok132/lvlang-crypto](https://github.com/dotdok132/lvlang-crypto) (`LibID 0x02` — SHA256 & AES)
+- 🖥️ **System OS Plugin**: [dotdok132/lvlang-system](https://github.com/dotdok132/lvlang-system) (`LibID 0x03` — Shell Commands, File I/O, Env Vars)
 
 ---
 
 ## ⚡ Key Philosophy: Maximum Token Density
 
-Standard programming languages (Python, JavaScript, C) are designed for humans to read, forcing LLMs to spend **up to 90% of their output tokens** on human syntactic boilerplate (`function`, `return`, `def`, `var`, braces, indentation).
+Standard programming languages (Python, JavaScript, C) were designed for human brains, forcing LLMs to spend **up to 90% of their output tokens** on human syntactic boilerplate (`function`, `return`, `def`, `var`, braces, indentation).
 
 **LVLang eliminates 100% of human syntactic bloat.**
 
-- **Strict 2-Byte Instruction Alignment**: Every instruction is exactly 2 bytes: `[1 Byte Opcode/Group] [1 Byte Operand/Register]`.
+- **Strict 2-Byte Instruction Alignment**: Every instruction is strictly 2 bytes: `[1 Byte Opcode/Group] [1 Byte Operand/Register]`.
 - **1 LLM Token = 1 Executable Command**: LLMs output raw hex streams (e.g. `0185013001800131011101100201013102200110049401110501050405FF`).
 - **Zero Parsing Overhead**: The C runtime directly executes the byte stream in memory without lexical parsing or AST building.
 
@@ -19,13 +31,27 @@ Standard programming languages (Python, JavaScript, C) are designed for humans t
 ## 🚀 Performance Benchmarks
 
 - **Execution Engine**: Pure C99 single-header runtime (`lvlang.h`).
-- **Memory Overhead**: 0 dynamic memory allocations (`malloc`).
-- **Execution Speed**: **~202 MIPS** (~4.94 ns per instruction).
-- **Benchmark Test**: 1,000,000 loop iterations executed in **14.8 ms**.
+- **Native JIT Engine**: Native x86-64 machine code emitter (`lvl_jit.h`).
+- **Execution Speed**: **~177 Million Full Program Executions Per Second** (**5.62 ns** per program run).
+- **JIT Compilation Time**: **295 nanoseconds** (0.000295 ms).
 
 ---
 
-## 📊 Opcode Matrix Specification
+## 📦 On-Demand Package Manager (`lvlc pkg`)
+
+Install official and 3rd-party modular plugin packages on-demand without bloating the core runtime:
+
+```bash
+# Install Cryptography plugin (SHA256, AES)
+./lvlc pkg install crypto
+
+# Install System OS plugin (Shell execution, File I/O)
+./lvlc pkg install system
+```
+
+---
+
+## 📊 Complete Opcode Matrix Specification
 
 Every instruction occupies **strictly 2 bytes**: `[Opcode: 1 Byte] [Operand/Reg: 1 Byte]`.
 
@@ -106,27 +132,18 @@ Every instruction occupies **strictly 2 bytes**: `[Opcode: 1 Byte] [Operand/Reg:
 | `0x06` | `0x02` | `SYS_RAND` | Push pseudo-random integer onto stack |
 | `0x06` | `0x03` | `SYS_CLOCK` | Push process CPU execution time in milliseconds |
 
-### 7. AI Vector & Embedding Math (`0x08`)
+### 9. AI Vector & Embedding Math (`0x08`)
 | Opcode (Hex) | Operand (Hex) | Name | Description |
 |---|---|---|---|
 | `0x08` | `0x01` | `VEC_DOT_4D` | Compute scalar dot product $R_{0..3} \cdot R_{4..7}$ -> Push to stack |
 | `0x08` | `0x02` | `VEC_ADD_4D` | Vector addition $R_{0..3} \leftarrow R_{0..3} + R_{4..7}$ |
 | `0x08` | `0x03` | `VEC_SCALE_4D` | Vector scaling $R_{0..3} \leftarrow R_{0..3} \times \text{StackTop}$ |
 
-### 8. I/O & System (`0x05`)
-| Opcode (Hex) | Operand (Hex) | Name | Description |
-|---|---|---|---|
-| `0x05` | `0x01` | `PRINT_NUM` | Print integer from stack top |
-| `0x05` | `0x02` | `PRINT_CHAR` | Print ASCII char from stack top |
-| `0x05` | `0x03` | `PRINT_STR` | Inline null-terminated string bytes follow directly |
-| `0x05` | `0x04` | `PRINT_NL` | Print newline `\n` |
-| `0x05` | `0xFF` | `HALT` | Halt execution cleanly |
-
 ---
 
 ## 🛠️ Building & Running
 
-### Build the CLI tool `lvlc`:
+### Build the CLI Tool & Package Manager `lvlc`:
 ```bash
 gcc -std=c99 -Wall -Wextra -pedantic lvlc.c -o lvlc
 ```
@@ -150,4 +167,4 @@ Output: 145
 
 ## 📄 License
 
-MIT License. Designed for AI Agent Architectures & Autonomous LLM Code Generation.
+MIT License. Designed for AI Agent Architectures, Autonomous LLM Code Generation, and High-Speed Hardware Execution.
