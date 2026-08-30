@@ -15,6 +15,21 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <signal.h>
+#include <termios.h>
+
+static void handle_signal(int sig) {
+    (void)sig;
+    struct termios t;
+    if (tcgetattr(STDIN_FILENO, &t) == 0) {
+        t.c_lflag |= (ICANON | ECHO);
+        tcsetattr(STDIN_FILENO, TCSANOW, &t);
+    }
+    lvl_vm_t dummy_vm;
+    lvl_sdl_destroy(&dummy_vm);
+    printf("\n[LVLang VM Interrupted by Ctrl+C / Signal %d] Graceful exit.\n", sig);
+    exit(0);
+}
 
 static void print_usage(const char *prog) {
     printf("LVLang Direct VM Runtime CLI (lvlc)\n");
@@ -177,6 +192,9 @@ static int validate_bytecode(const uint8_t *code, size_t sz, bool verbose) {
 }
 
 int main(int argc, char **argv) {
+    signal(SIGINT, handle_signal);
+    signal(SIGTERM, handle_signal);
+
     if (argc < 2) {
         print_usage(argv[0]);
         return 1;
@@ -254,7 +272,7 @@ int main(int argc, char **argv) {
             size_t cur_ip = vm.ip;
             uint8_t op1 = vm.bytecode[cur_ip];
             uint8_t op2 = (cur_ip + 1 < vm.bytecode_size) ? vm.bytecode[cur_ip + 1] : 0;
-            printf("Step %4zu | IP %4zu: [%02X %02X] | SP: %d | CSP: %zu\n",
+            printf("Step %4zu | IP %4zu: [%02X %02X] | SP: %zu | CSP: %zu\n",
                    step_count++, cur_ip, op1, op2, vm.sp, vm.csp);
             lvl_step(&vm);
             if (step_count > 5000) {
