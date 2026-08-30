@@ -76,7 +76,21 @@ Every instruction occupies **strictly 2 bytes**: `[Opcode: 1 Byte] [Operand/Reg:
 | `0x07` | `0x30 + R` | `MACRO_PRINT_REG_RAW` | Print register $R_i$ (no newline) |
 | `0x07` | `0x40 + R` | `MACRO_CLEAR_REG` | Zero out register $R_i$ ($R_i \leftarrow 0$) |
 
-### 6. I/O & System (`0x05`)
+### 6. System Syscalls (`0x06`)
+| Opcode (Hex) | Operand (Hex) | Name | Description |
+|---|---|---|---|
+| `0x06` | `0x01` | `SYS_TIME` | Push current Unix epoch timestamp in seconds onto stack |
+| `0x06` | `0x02` | `SYS_RAND` | Push pseudo-random integer onto stack |
+| `0x06` | `0x03` | `SYS_CLOCK` | Push process CPU execution time in milliseconds |
+
+### 7. AI Vector & Embedding Math (`0x08`)
+| Opcode (Hex) | Operand (Hex) | Name | Description |
+|---|---|---|---|
+| `0x08` | `0x01` | `VEC_DOT_4D` | Compute scalar dot product $R_{0..3} \cdot R_{4..7}$ -> Push to stack |
+| `0x08` | `0x02` | `VEC_ADD_4D` | Vector addition $R_{0..3} \leftarrow R_{0..3} + R_{4..7}$ |
+| `0x08` | `0x03` | `VEC_SCALE_4D` | Vector scaling $R_{0..3} \leftarrow R_{0..3} \times \text{StackTop}$ |
+
+### 8. I/O & System (`0x05`)
 | Opcode (Hex) | Operand (Hex) | Name | Description |
 |---|---|---|---|
 | `0x05` | `0x01` | `PRINT_NUM` | Print integer from stack top |

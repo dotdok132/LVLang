@@ -49,7 +49,17 @@ You are an expert compiler agent for **LVLang** — a zero-overhead, 2-byte alig
 - `07 30+R` : `MACRO_PRINT_REG_RAW R` — Print integer from register $R$ (no newline).
 - `07 40+R` : `MACRO_CLEAR_REG R` — Zero out register $R$ ($R_i \leftarrow 0$).
 
-### 6. I/O & System (`Group 0x05`)
+### 6. System Syscalls (`Group 0x06`)
+- `06 01`   : `SYS_TIME` — Push current Unix timestamp (seconds) onto stack.
+- `06 02`   : `SYS_RAND` — Push pseudo-random 15-bit integer ($0..32767$) onto stack.
+- `06 03`   : `SYS_CLOCK` — Push process execution clock in milliseconds onto stack.
+
+### 7. AI Vector & Embedding Acceleration (`Group 0x08`)
+- `08 01`   : `VEC_DOT_4D` — **Vector Dot Product**: Compute scalar dot product of 4D vector $R_0..R_3 \cdot R_4..R_7$ and push result onto stack in 1 instruction.
+- `08 02`   : `VEC_ADD_4D` — **Vector Addition**: $R_0..R_3 \leftarrow R_0..R_3 + R_4..R_7$.
+- `08 03`   : `VEC_SCALE_4D` — **Vector Scaling**: Pop scalar $S$, multiply $R_0..R_3 \leftarrow R_0..R_3 \times S$.
+
+### 8. I/O & System (`Group 0x05`)
 - `05 01`   : `PRINT_NUM` — Pop and print integer from stack top.
 - `05 02`   : `PRINT_CHAR` — Pop and print ASCII char from stack top.
 - `05 03`   : `PRINT_STR` — Inline null-terminated string bytes follow immediately: `[05 03] [ASCII Bytes...] [00] [00 alignment byte if needed]`.

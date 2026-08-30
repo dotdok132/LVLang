@@ -88,6 +88,8 @@ int lvl_compile(const char *source, uint8_t *out_bytecode, size_t *out_size);
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <time.h>
+#include <math.h>
 
 #ifndef LVL_NO_STDIO
 static void lvl_default_print_num(int32_t val) {
@@ -282,6 +284,27 @@ int lvl_step(lvl_vm_t *vm) {
             }
             break;
 
+        /* MODULE 0x06: SYSTEM SYSCALLS & ENVIRONMENT */
+        case 0x06:
+            switch (b2) {
+                case 0x01:
+                    /* SYS_TIME: Push Unix timestamp in seconds */
+                    lvl_push(vm, (int32_t)time(NULL));
+                    break;
+                case 0x02:
+                    /* SYS_RAND: Push pseudo-random 15-bit integer */
+                    lvl_push(vm, (int32_t)(rand() & 0x7FFF));
+                    break;
+                case 0x03:
+                    /* SYS_CLOCK: Push process clock in milliseconds */
+                    lvl_push(vm, (int32_t)(clock() * 1000 / CLOCKS_PER_SEC));
+                    break;
+                default:
+                    vm->status = LVL_ERR_INVALID_OPCODE;
+                    break;
+            }
+            break;
+
         /* MODULE 0x07: MACRO / SHORTCUT OPCODES */
         case 0x07:
             if (b2 >= 0x10 && b2 <= 0x1F) {
@@ -301,6 +324,40 @@ int lvl_step(lvl_vm_t *vm) {
                 vm->registers[reg] = 0;
             } else {
                 vm->status = LVL_ERR_INVALID_OPCODE;
+            }
+            break;
+
+        /* MODULE 0x08: VECTOR & EMBEDDING MATH (AI HARDWARE ACCELERATION) */
+        case 0x08:
+            switch (b2) {
+                case 0x01: {
+                    /* VEC_DOT_4D: Dot product of (R0..R3) . (R4..R7) -> Push to stack */
+                    int32_t dot = (vm->registers[0] * vm->registers[4]) +
+                                  (vm->registers[1] * vm->registers[5]) +
+                                  (vm->registers[2] * vm->registers[6]) +
+                                  (vm->registers[3] * vm->registers[7]);
+                    lvl_push(vm, dot);
+                    break;
+                }
+                case 0x02: {
+                    /* VEC_ADD_4D: (R0..R3) += (R4..R7) */
+                    for (int i = 0; i < 4; i++) {
+                        vm->registers[i] += vm->registers[i + 4];
+                    }
+                    break;
+                }
+                case 0x03: {
+                    /* VEC_SCALE_4D: (R0..R3) *= Stack Top Scalar */
+                    if (lvl_pop(vm, &a)) {
+                        for (int i = 0; i < 4; i++) {
+                            vm->registers[i] *= a;
+                        }
+                    }
+                    break;
+                }
+                default:
+                    vm->status = LVL_ERR_INVALID_OPCODE;
+                    break;
             }
             break;
 
