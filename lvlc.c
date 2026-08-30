@@ -33,7 +33,7 @@ static size_t parse_hex_stream(const char *str, uint8_t *out_buf, size_t max_siz
     const char *p = str;
 
     while (*p && count < max_size) {
-        while (*p && (isspace((unsigned char)*p) || *p == ',' || *p == '{' || *p == '}')) p++;
+        while (*p && (isspace((unsigned char)*p) || *p == ',' || *p == '{' || *p == '}' || *p == 'x' || *p == 'X')) p++;
         if (!*p) break;
 
         if (p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) p += 2;
