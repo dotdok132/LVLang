@@ -57,7 +57,7 @@ Install official and 3rd-party modular plugin packages on-demand without bloatin
 
 Every instruction occupies **strictly 2 bytes**: `[Opcode: 1 Byte] [Operand/Reg: 1 Byte]`.
 
-### 1. Stack, Registers & RAM Memory (`0x01`)
+### 1. Stack, Registers, RAM & Dynamic Heap (`0x01`)
 | Opcode (Hex) | Operand (Hex) | Name | Description |
 |---|---|---|---|
 | `0x01` | `0x80 + N` | `PUSH_IMM` | Push 7-bit integer $N$ onto data stack |
@@ -69,6 +69,10 @@ Every instruction occupies **strictly 2 bytes**: `[Opcode: 1 Byte] [Operand/Reg:
 | `0x01` | `0x30 + R` | `STORE_REG` | Store data stack top into register $R_0..R_{15}$ |
 | `0x01` | `0x40 + R` | `LOAD_RAM` | **RAM Memory**: Push `RAM[R_idx]` ($0..1023$) onto data stack |
 | `0x01` | `0x50 + R` | `STORE_RAM` | **RAM Memory**: Pop stack top into `RAM[R_idx]` ($0..1023$) |
+| `0x01` | `0x60` | `MALLOC` | **Dynamic Heap**: Pop size $N$; allocate $N$ words and push `ChunkID` (or -1 if err) |
+| `0x01` | `0x61` | `FREE` | **Dynamic Heap**: Pop `ChunkID` and free the memory chunk |
+| `0x01` | `0x62` | `LOAD_HEAP` | **Dynamic Heap**: Pop `Offset`, Pop `ChunkID`; push `Heap[ChunkID][Offset]` |
+| `0x01` | `0x63` | `STORE_HEAP` | **Dynamic Heap**: Pop `Value`, Pop `Offset`, Pop `ChunkID`; store `Heap[ChunkID][Offset] = Value` |
 
 ### 2. Integer & Float Arithmetic (`0x02`)
 | Opcode (Hex) | Operand (Hex) | Name | Description |
@@ -109,7 +113,17 @@ Every instruction occupies **strictly 2 bytes**: `[Opcode: 1 Byte] [Operand/Reg:
 | `0x04` | `0xFE [Low High]` | `JMP_FAR` | **16-Bit Long Jump**: Unconditional jump to index $0..65,535$ (Up to 128KB) |
 | `0x04` | `0xFF [Low High]` | `CALL_FAR` | **16-Bit Long Subroutine Call** |
 
-### 5. Macro Shortcut Opcodes (`0x07` — 1-Command Abbreviations)
+### 5. Relative Flow Control (`0x09` — AI-Optimized 2-Byte Local Jumps)
+| Opcode (Hex) | Operand (Hex) | Name | Description |
+|---|---|---|---|
+| `0x09` | `0x00 + (N-1)` | `JMP_REL_BACK` | Jump backward $N$ instructions ($1 \le N \le 31$) |
+| `0x09` | `0x20 + (N-1)` | `JMP_REL_FWD` | Jump forward $N$ instructions ($1 \le N \le 32$) |
+| `0x09` | `0x40 + (N-1)` | `JZ_REL_BACK` | Jump backward $N$ instructions if stack top $== 0$ |
+| `0x09` | `0x60 + (N-1)` | `JZ_REL_FWD` | Jump forward $N$ instructions if stack top $== 0$ |
+| `0x09` | `0x80 + (N-1)` | `JNZ_REL_BACK` | Jump backward $N$ instructions if stack top $\neq 0$ |
+| `0x09` | `0xA0 + (N-1)` | `JNZ_REL_FWD` | Jump forward $N$ instructions if stack top $\neq 0$ |
+
+### 6. Macro Shortcut Opcodes (`0x07` — 1-Command Abbreviations)
 | Opcode (Hex) | Operand (Hex) | Name | Description |
 |---|---|---|---|
 | `0x07` | `0x10 + R` | `MACRO_PRINT_REG` | Print register $R_i$ + newline `\n` |

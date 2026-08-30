@@ -56,7 +56,15 @@ You are an expert compiler agent for **LVLang** — a zero-overhead, 2-byte alig
 - `04 FE [Low High]`: `JMP_FAR` — **16-Bit Long Jump**: Unconditional jump to index $0..65,535$ (Up to 128KB program size!).
 - `04 FF [Low High]`: `CALL_FAR` — **16-Bit Long Subroutine Call**.
 
-### 5. Macro Shortcut Opcodes (`Group 0x07` — 1-Command Abbreviations)
+### 5. Relative Flow Control (`Group 0x09` — AI-Optimized 2-Byte Local Jumps)
+- `09 00+(N-1)` : `JMP_REL_BACK N` — Jump backward $N$ instructions ($1 \le N \le 31$).
+- `09 20+(N-1)` : `JMP_REL_FWD N` — Jump forward $N$ instructions ($1 \le N \le 32$).
+- `09 40+(N-1)` : `JZ_REL_BACK N` — Pop stack; jump backward $N$ instructions if stack top $== 0$.
+- `09 60+(N-1)` : `JZ_REL_FWD N` — Pop stack; jump forward $N$ instructions if stack top $== 0$.
+- `09 80+(N-1)` : `JNZ_REL_BACK N` — Pop stack; jump backward $N$ instructions if stack top $\neq 0$.
+- `09 A0+(N-1)` : `JNZ_REL_FWD N` — Pop stack; jump forward $N$ instructions if stack top $\neq 0$.
+
+### 6. Macro Shortcut Opcodes (`Group 0x07` — 1-Command Abbreviations)
 - `07 10+R` : `MACRO_PRINT_REG R` — **1-Command Output**: Print integer from register $R$ + newline `\n`.
 - `07 30+R` : `MACRO_PRINT_REG_RAW R` — Print integer from register $R$ (no newline).
 - `07 40+R` : `MACRO_CLEAR_REG R` — Zero out register $R$ ($R_i \leftarrow 0$).

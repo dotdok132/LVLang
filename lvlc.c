@@ -97,6 +97,7 @@ int main(int argc, char **argv) {
     const char *target = argv[1];
 
     FILE *f = fopen(target, "rb");
+
     if (f) {
         fseek(f, 0, SEEK_END);
         long fsize = ftell(f);

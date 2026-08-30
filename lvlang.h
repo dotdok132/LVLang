@@ -41,11 +41,17 @@ typedef enum {
     LVL_ERR_CALL_STACK_UNDERFLOW = -5,
     LVL_ERR_DIVISION_BY_ZERO     = -6,
     LVL_ERR_OUT_OF_BOUNDS        = -7,
-    LVL_ERR_COMPILATION_FAILED   = -8
+    LVL_ERR_COMPILATION_FAILED   = -8,
+    LVL_ERR_OUT_OF_MEMORY        = -9,
+    LVL_ERR_INVALID_HEAP_ID      = -10
 } lvl_status_t;
 
 #ifndef LVL_MAX_FFI_FUNCS
 #define LVL_MAX_FFI_FUNCS 64
+#endif
+
+#ifndef LVL_MAX_HEAP_CHUNKS
+#define LVL_MAX_HEAP_CHUNKS 256
 #endif
 
 struct lvl_vm;
@@ -74,6 +80,9 @@ typedef struct lvl_vm {
     LvlFFIFunc ffi_table[LVL_MAX_FFI_FUNCS];
     size_t ffi_count;
 
+    int32_t *heap_chunks[LVL_MAX_HEAP_CHUNKS];
+    size_t heap_chunk_sizes[LVL_MAX_HEAP_CHUNKS];
+
     const uint8_t *bytecode;
     size_t bytecode_size;
     size_t ip;
@@ -85,6 +94,7 @@ typedef struct lvl_vm {
 } lvl_vm_t;
 
 void lvl_init(lvl_vm_t *vm, const uint8_t *bytecode, size_t size);
+void lvl_destroy(lvl_vm_t *vm);
 int  lvl_register_ffi(lvl_vm_t *vm, uint8_t lib_id, uint8_t func_id, lvl_native_fn fn);
 int  lvl_step(lvl_vm_t *vm);
 int  lvl_run(lvl_vm_t *vm);
@@ -146,9 +156,24 @@ void lvl_init(lvl_vm_t *vm, const uint8_t *bytecode, size_t size) {
     for (size_t i = 0; i < LVL_RAM_SIZE; i++) vm->ram[i] = 0;
     for (size_t i = 0; i < LVL_STACK_SIZE; i++) vm->stack[i] = 0;
     for (size_t i = 0; i < LVL_CALL_STACK_SIZE; i++) vm->call_stack[i] = 0;
+    for (size_t i = 0; i < LVL_MAX_HEAP_CHUNKS; i++) {
+        vm->heap_chunks[i] = NULL;
+        vm->heap_chunk_sizes[i] = 0;
+    }
 
     vm->print_num = lvl_default_print_num;
     vm->print_char = lvl_default_print_char;
+}
+
+void lvl_destroy(lvl_vm_t *vm) {
+    if (!vm) return;
+    for (size_t i = 0; i < LVL_MAX_HEAP_CHUNKS; i++) {
+        if (vm->heap_chunks[i]) {
+            free(vm->heap_chunks[i]);
+            vm->heap_chunks[i] = NULL;
+            vm->heap_chunk_sizes[i] = 0;
+        }
+    }
 }
 
 int lvl_register_ffi(lvl_vm_t *vm, uint8_t lib_id, uint8_t func_id, lvl_native_fn fn) {
@@ -243,6 +268,70 @@ int lvl_step(lvl_vm_t *vm) {
                 uint8_t reg = b2 - 0x50;
                 size_t ram_idx = (size_t)(vm->registers[reg] >= 0 ? vm->registers[reg] : 0) % LVL_RAM_SIZE;
                 if (lvl_pop(vm, &a)) vm->ram[ram_idx] = a;
+            } else if (b2 == 0x60) {
+                /* MALLOC: pop size, push chunk_id */
+                if (lvl_pop(vm, &a)) {
+                    if (a <= 0) {
+                        lvl_push(vm, -1);
+                    } else {
+                        int chunk_id = -1;
+                        for (int i = 0; i < LVL_MAX_HEAP_CHUNKS; i++) {
+                            if (vm->heap_chunks[i] == NULL) {
+                                chunk_id = i;
+                                break;
+                            }
+                        }
+                        if (chunk_id != -1) {
+                            vm->heap_chunks[chunk_id] = (int32_t *)calloc(a, sizeof(int32_t));
+                            if (vm->heap_chunks[chunk_id]) {
+                                vm->heap_chunk_sizes[chunk_id] = (size_t)a;
+                                lvl_push(vm, chunk_id);
+                            } else {
+                                vm->status = LVL_ERR_OUT_OF_MEMORY;
+                            }
+                        } else {
+                            vm->status = LVL_ERR_OUT_OF_MEMORY;
+                        }
+                    }
+                }
+            } else if (b2 == 0x61) {
+                /* FREE: pop chunk_id */
+                if (lvl_pop(vm, &a)) {
+                    if (a >= 0 && a < LVL_MAX_HEAP_CHUNKS && vm->heap_chunks[a] != NULL) {
+                        free(vm->heap_chunks[a]);
+                        vm->heap_chunks[a] = NULL;
+                        vm->heap_chunk_sizes[a] = 0;
+                    } else {
+                        vm->status = LVL_ERR_INVALID_HEAP_ID;
+                    }
+                }
+            } else if (b2 == 0x62) {
+                /* LOAD_HEAP: pop offset, pop chunk_id, push heap[chunk_id][offset] */
+                if (lvl_pop(vm, &b) && lvl_pop(vm, &a)) {
+                    if (a >= 0 && a < LVL_MAX_HEAP_CHUNKS && vm->heap_chunks[a] != NULL) {
+                        if (b >= 0 && (size_t)b < vm->heap_chunk_sizes[a]) {
+                            lvl_push(vm, vm->heap_chunks[a][b]);
+                        } else {
+                            vm->status = LVL_ERR_OUT_OF_BOUNDS;
+                        }
+                    } else {
+                        vm->status = LVL_ERR_INVALID_HEAP_ID;
+                    }
+                }
+            } else if (b2 == 0x63) {
+                /* STORE_HEAP: pop value, pop offset, pop chunk_id, heap[chunk_id][offset] = value */
+                int32_t val;
+                if (lvl_pop(vm, &val) && lvl_pop(vm, &b) && lvl_pop(vm, &a)) {
+                    if (a >= 0 && a < LVL_MAX_HEAP_CHUNKS && vm->heap_chunks[a] != NULL) {
+                        if (b >= 0 && (size_t)b < vm->heap_chunk_sizes[a]) {
+                            vm->heap_chunks[a][b] = val;
+                        } else {
+                            vm->status = LVL_ERR_OUT_OF_BOUNDS;
+                        }
+                    } else {
+                        vm->status = LVL_ERR_INVALID_HEAP_ID;
+                    }
+                }
             } else {
                 vm->status = LVL_ERR_INVALID_OPCODE;
             }
@@ -508,6 +597,51 @@ int lvl_step(lvl_vm_t *vm) {
             }
             break;
 
+        /* MODULE 0x09: RELATIVE FLOW CONTROL (AI-OPTIMIZED 2-BYTE RELATIVE JUMPS) */
+        case 0x09:
+            if (b2 >= 0x01 && b2 <= 0x1F) {
+                /* JMP_REL_BACK N (1..31 instructions) */
+                size_t n = (size_t)b2;
+                if (vm->ip >= n * 2) vm->ip -= n * 2;
+                else vm->status = LVL_ERR_OUT_OF_BOUNDS;
+            } else if (b2 >= 0x20 && b2 <= 0x3F) {
+                /* JMP_REL_FWD N (1..32 instructions) */
+                size_t n = (size_t)(b2 - 0x20 + 1);
+                if (vm->ip + n * 2 <= vm->bytecode_size) vm->ip += n * 2;
+                else vm->status = LVL_ERR_OUT_OF_BOUNDS;
+            } else if (b2 >= 0x40 && b2 <= 0x5F) {
+                /* JZ_REL_BACK N (1..32 instructions) */
+                size_t n = (size_t)(b2 - 0x40 + 1);
+                if (lvl_pop(vm, &a) && a == 0) {
+                    if (vm->ip >= n * 2) vm->ip -= n * 2;
+                    else vm->status = LVL_ERR_OUT_OF_BOUNDS;
+                }
+            } else if (b2 >= 0x60 && b2 <= 0x7F) {
+                /* JZ_REL_FWD N (1..32 instructions) */
+                size_t n = (size_t)(b2 - 0x60 + 1);
+                if (lvl_pop(vm, &a) && a == 0) {
+                    if (vm->ip + n * 2 <= vm->bytecode_size) vm->ip += n * 2;
+                    else vm->status = LVL_ERR_OUT_OF_BOUNDS;
+                }
+            } else if (b2 >= 0x80 && b2 <= 0x9F) {
+                /* JNZ_REL_BACK N (1..32 instructions) */
+                size_t n = (size_t)(b2 - 0x80 + 1);
+                if (lvl_pop(vm, &a) && a != 0) {
+                    if (vm->ip >= n * 2) vm->ip -= n * 2;
+                    else vm->status = LVL_ERR_OUT_OF_BOUNDS;
+                }
+            } else if (b2 >= 0xA0 && b2 <= 0xBF) {
+                /* JNZ_REL_FWD N (1..32 instructions) */
+                size_t n = (size_t)(b2 - 0xA0 + 1);
+                if (lvl_pop(vm, &a) && a != 0) {
+                    if (vm->ip + n * 2 <= vm->bytecode_size) vm->ip += n * 2;
+                    else vm->status = LVL_ERR_OUT_OF_BOUNDS;
+                }
+            } else {
+                vm->status = LVL_ERR_INVALID_OPCODE;
+            }
+            break;
+
         /* MODULE 0x0A: STRING & PATTERN PROCESSING */
         case 0x0A:
             switch (b2) {
@@ -612,340 +746,6 @@ void lvl_reg_set(lvl_vm_t *vm, uint8_t reg_idx, int32_t val) {
     vm->registers[reg_idx] = val;
 }
 
-/* ========================================================================== */
-/* HIGH-LEVEL COMPILER (lvl_compile)                                         */
-/* ========================================================================== */
 
-typedef struct {
-    char name[64];
-    size_t inst_idx;
-} LvlSymbol;
-
-typedef struct {
-    LvlSymbol symbols[128];
-    size_t count;
-} LvlSymbolTable;
-
-static void lvl_symbol_add(LvlSymbolTable *st, const char *name, size_t inst_idx) {
-    if (st->count >= 128) return;
-    strncpy(st->symbols[st->count].name, name, 63);
-    st->symbols[st->count].name[63] = '\0';
-    st->symbols[st->count].inst_idx = inst_idx;
-    st->count++;
-}
-
-static int lvl_symbol_find(const LvlSymbolTable *st, const char *name) {
-    for (size_t i = 0; i < st->count; i++) {
-        if (strcmp(st->symbols[i].name, name) == 0) return (int)st->symbols[i].inst_idx;
-    }
-    return -1;
-}
-
-static char *lvl_trim(char *s) {
-    while (isspace((unsigned char)*s)) s++;
-    if (*s == 0) return s;
-    char *end = s + strlen(s) - 1;
-    while (end > s && isspace((unsigned char)*end)) end--;
-    end[1] = '\0';
-    return s;
-}
-
-static void lvl_strip_comments(char *line) {
-    char *p1 = strchr(line, '#'); if (p1) *p1 = '\0';
-    char *p2 = strstr(line, "//"); if (p2) *p2 = '\0';
-}
-
-static int lvl_parse_reg(const char *arg) {
-    if (arg[0] == 'R' || arg[0] == 'r') return atoi(arg + 1);
-    return atoi(arg);
-}
-
-static char *lvl_find_label_colon(char *line) {
-    bool in_quote = false;
-    for (char *p = line; *p; p++) {
-        if (*p == '"') in_quote = !in_quote;
-        if (!in_quote && *p == ':') return p;
-    }
-    return NULL;
-}
-
-static size_t lvl_calc_string_bytes(const char *str) {
-    size_t raw_len = 0;
-    for (size_t i = 0; str[i] && str[i] != '"'; i++) {
-        if (str[i] == '\\' && str[i+1] == 'n') {
-            raw_len++;
-            i++;
-        } else {
-            raw_len++;
-        }
-    }
-    size_t total_bytes = 2 + raw_len + 1;
-    if (total_bytes % 2 != 0) total_bytes++;
-    return total_bytes;
-}
-
-int lvl_compile(const char *source, uint8_t *out_bytecode, size_t *out_size) {
-    if (!source || !out_bytecode || !out_size) return LVL_ERR_COMPILATION_FAILED;
-
-    LvlSymbolTable st = { .count = 0 };
-    char line_buf[256];
-
-    /* PASS 1: Calculate Instruction Indices for Labels & High-Level Statements */
-    size_t pass1_inst_idx = 0;
-    const char *src_ptr = source;
-
-    while (*src_ptr) {
-        size_t len = 0;
-        while (*src_ptr && *src_ptr != '\n' && len < 255) line_buf[len++] = *src_ptr++;
-        if (*src_ptr == '\n') src_ptr++;
-        line_buf[len] = '\0';
-
-        lvl_strip_comments(line_buf);
-        char *line = lvl_trim(line_buf);
-        if (strlen(line) == 0) continue;
-
-        char *colon = lvl_find_label_colon(line);
-        if (colon && *(colon + 1) == '\0') {
-            *colon = '\0';
-            lvl_symbol_add(&st, lvl_trim(line), pass1_inst_idx);
-            continue;
-        } else if (colon) {
-            *colon = '\0';
-            lvl_symbol_add(&st, lvl_trim(line), pass1_inst_idx);
-            line = lvl_trim(colon + 1);
-        }
-
-        if (strlen(line) > 0) {
-            if (strchr(line, '=') && strncmp(line, "print", 5) != 0) {
-                char v[32] = {0}, rhs[128] = {0};
-                if (sscanf(line, "%31[^=] = %127[^\n]", v, rhs) == 2) {
-                    char r1[32] = {0}, op[8] = {0}, r2[32] = {0};
-                    int tok = sscanf(rhs, "%31s %7s %31s", r1, op, r2);
-                    if (tok == 3) pass1_inst_idx += 4;
-                    else pass1_inst_idx += 2;
-                } else pass1_inst_idx++;
-            } else if (strstr(line, "++") || strstr(line, "--")) {
-                pass1_inst_idx++;
-            } else if (strncmp(line, "print(", 6) == 0 || strncmp(line, "PRINT_STR", 9) == 0) {
-                char *quote_start = strchr(line, '"');
-                if (quote_start) {
-                    size_t bytes = lvl_calc_string_bytes(quote_start + 1);
-                    pass1_inst_idx += bytes / 2;
-                } else {
-                    pass1_inst_idx += 3;
-                }
-            } else {
-                pass1_inst_idx++;
-            }
-        }
-    }
-
-    /* PASS 2: Code Generation */
-    size_t out_offset = 0;
-    src_ptr = source;
-
-    while (*src_ptr) {
-        size_t len = 0;
-        while (*src_ptr && *src_ptr != '\n' && len < 255) line_buf[len++] = *src_ptr++;
-        if (*src_ptr == '\n') src_ptr++;
-        line_buf[len] = '\0';
-
-        lvl_strip_comments(line_buf);
-        char *line = lvl_trim(line_buf);
-        if (strlen(line) == 0) continue;
-
-        char *colon = lvl_find_label_colon(line);
-        if (colon) line = lvl_trim(colon + 1);
-        if (strlen(line) == 0) continue;
-
-        /* 1. High-Level Assignment: r0 = 100  or  r2 = r0 - r1 */
-        if (strchr(line, '=') && strncmp(line, "print", 5) != 0) {
-            char var_name[32] = {0}, rhs_expr[128] = {0};
-            if (sscanf(line, "%31[^=] = %127[^\n]", var_name, rhs_expr) == 2) {
-                int reg_id = lvl_parse_reg(lvl_trim(var_name));
-                char rhs1[32] = {0}, op_str[8] = {0}, rhs2[32] = {0};
-                int rhs_tokens = sscanf(rhs_expr, "%31s %7s %31s", rhs1, op_str, rhs2);
-
-                if (rhs_tokens == 1) {
-                    if (isdigit((unsigned char)rhs1[0]) || rhs1[0] == '-') {
-                        out_bytecode[out_offset++] = 0x01;
-                        out_bytecode[out_offset++] = 0x80 + (uint8_t)(atoi(rhs1) & 0x7F);
-                    } else {
-                        out_bytecode[out_offset++] = 0x01;
-                        out_bytecode[out_offset++] = 0x10 + (uint8_t)lvl_parse_reg(rhs1);
-                    }
-                    out_bytecode[out_offset++] = 0x01;
-                    out_bytecode[out_offset++] = 0x30 + (uint8_t)reg_id;
-                } else if (rhs_tokens == 3) {
-                    if (isdigit((unsigned char)rhs1[0]) || rhs1[0] == '-') {
-                        out_bytecode[out_offset++] = 0x01;
-                        out_bytecode[out_offset++] = 0x80 + (uint8_t)(atoi(rhs1) & 0x7F);
-                    } else {
-                        out_bytecode[out_offset++] = 0x01;
-                        out_bytecode[out_offset++] = 0x10 + (uint8_t)lvl_parse_reg(rhs1);
-                    }
-                    if (isdigit((unsigned char)rhs2[0]) || rhs2[0] == '-') {
-                        out_bytecode[out_offset++] = 0x01;
-                        out_bytecode[out_offset++] = 0x80 + (uint8_t)(atoi(rhs2) & 0x7F);
-                    } else {
-                        out_bytecode[out_offset++] = 0x01;
-                        out_bytecode[out_offset++] = 0x10 + (uint8_t)lvl_parse_reg(rhs2);
-                    }
-                    uint8_t op_byte = 0x01;
-                    if (strcmp(op_str, "+") == 0) op_byte = 0x01;
-                    else if (strcmp(op_str, "-") == 0) op_byte = 0x02;
-                    else if (strcmp(op_str, "*") == 0) op_byte = 0x03;
-                    else if (strcmp(op_str, "/") == 0) op_byte = 0x04;
-
-                    out_bytecode[out_offset++] = 0x02;
-                    out_bytecode[out_offset++] = op_byte;
-
-                    out_bytecode[out_offset++] = 0x01;
-                    out_bytecode[out_offset++] = 0x30 + (uint8_t)reg_id;
-                }
-                continue;
-            }
-        }
-
-        /* 2. High-Level Increment/Decrement: r0++ or r0-- */
-        if (strstr(line, "++")) {
-            char inc_var[32] = {0};
-            if (sscanf(line, "%31[a-zA-Z0-9]++", inc_var) == 1) {
-                out_bytecode[out_offset++] = 0x02;
-                out_bytecode[out_offset++] = 0x10 + (uint8_t)lvl_parse_reg(inc_var);
-                continue;
-            }
-        }
-        if (strstr(line, "--")) {
-            char inc_var[32] = {0};
-            if (sscanf(line, "%31[a-zA-Z0-9]--", inc_var) == 1) {
-                out_bytecode[out_offset++] = 0x02;
-                out_bytecode[out_offset++] = 0x20 + (uint8_t)lvl_parse_reg(inc_var);
-                continue;
-            }
-        }
-
-        /* 3. High-Level Print: print("text") or print(r0) */
-        if (strncmp(line, "print(", 6) == 0) {
-            char inside[192] = {0};
-            strncpy(inside, line + 6, sizeof(inside) - 1);
-            char *closing = strrchr(inside, ')');
-            if (closing) *closing = '\0';
-            char *clean_inside = lvl_trim(inside);
-
-            if (clean_inside[0] == '"') {
-                clean_inside++;
-                char *quote_end = strrchr(clean_inside, '"');
-                if (quote_end) *quote_end = '\0';
-
-                out_bytecode[out_offset++] = 0x05;
-                out_bytecode[out_offset++] = 0x03; /* PRINT_STR */
-
-                for (size_t s = 0; clean_inside[s]; s++) {
-                    if (clean_inside[s] == '\\' && clean_inside[s+1] == 'n') {
-                        out_bytecode[out_offset++] = '\n';
-                        s++;
-                    } else out_bytecode[out_offset++] = clean_inside[s];
-                }
-                out_bytecode[out_offset++] = '\0';
-                if (out_offset % 2 != 0) out_bytecode[out_offset++] = 0x00;
-            } else {
-                int pr_reg = lvl_parse_reg(clean_inside);
-                out_bytecode[out_offset++] = 0x01;
-                out_bytecode[out_offset++] = 0x10 + (uint8_t)pr_reg;
-                out_bytecode[out_offset++] = 0x05;
-                out_bytecode[out_offset++] = 0x01; /* PRINT_NUM */
-                out_bytecode[out_offset++] = 0x05;
-                out_bytecode[out_offset++] = 0x04; /* PRINT_NL */
-            }
-            continue;
-        }
-
-        /* 4. Mnemonic Fallback Parsing */
-        char mnem[64] = {0};
-        char arg[192] = {0};
-        int tokens = sscanf(line, "%63s %191[^\n]", mnem, arg);
-        if (tokens < 1) continue;
-
-        for (int i = 0; mnem[i]; i++) mnem[i] = (char)toupper((unsigned char)mnem[i]);
-
-        uint8_t b1 = 0, b2 = 0;
-        bool is_string_inst = false;
-
-        if (strcmp(mnem, "PUSH") == 0) {
-            b1 = 0x01; b2 = 0x80 + (uint8_t)(atoi(arg) & 0x7F);
-        } else if (strcmp(mnem, "POP") == 0) {
-            b1 = 0x01; b2 = 0x01;
-        } else if (strcmp(mnem, "DUP") == 0) {
-            b1 = 0x01; b2 = 0x02;
-        } else if (strcmp(mnem, "SWAP") == 0) {
-            b1 = 0x01; b2 = 0x03;
-        } else if (strcmp(mnem, "LOAD") == 0 || strcmp(mnem, "LOAD_REG") == 0) {
-            b1 = 0x01; b2 = 0x10 + (uint8_t)lvl_parse_reg(arg);
-        } else if (strcmp(mnem, "STORE") == 0 || strcmp(mnem, "STORE_REG") == 0) {
-            b1 = 0x01; b2 = 0x30 + (uint8_t)lvl_parse_reg(arg);
-        } else if (strcmp(mnem, "ADD") == 0) { b1 = 0x02; b2 = 0x01; }
-        else if (strcmp(mnem, "SUB") == 0) { b1 = 0x02; b2 = 0x02; }
-        else if (strcmp(mnem, "MUL") == 0) { b1 = 0x02; b2 = 0x03; }
-        else if (strcmp(mnem, "DIV") == 0) { b1 = 0x02; b2 = 0x04; }
-        else if (strcmp(mnem, "MOD") == 0) { b1 = 0x02; b2 = 0x05; }
-        else if (strcmp(mnem, "INC") == 0) { b1 = 0x02; b2 = 0x10 + (uint8_t)lvl_parse_reg(arg); }
-        else if (strcmp(mnem, "DEC") == 0) { b1 = 0x02; b2 = 0x20 + (uint8_t)lvl_parse_reg(arg); }
-        else if (strcmp(mnem, "EQ") == 0)  { b1 = 0x03; b2 = 0x01; }
-        else if (strcmp(mnem, "NEQ") == 0) { b1 = 0x03; b2 = 0x02; }
-        else if (strcmp(mnem, "GT") == 0)  { b1 = 0x03; b2 = 0x03; }
-        else if (strcmp(mnem, "LT") == 0)  { b1 = 0x03; b2 = 0x04; }
-        else if (strcmp(mnem, "GTE") == 0) { b1 = 0x03; b2 = 0x05; }
-        else if (strcmp(mnem, "LTE") == 0) { b1 = 0x03; b2 = 0x06; }
-        else if (strcmp(mnem, "AND") == 0) { b1 = 0x03; b2 = 0x07; }
-        else if (strcmp(mnem, "OR") == 0)  { b1 = 0x03; b2 = 0x08; }
-        else if (strcmp(mnem, "NOT") == 0) { b1 = 0x03; b2 = 0x09; }
-        else if (strcmp(mnem, "JMP") == 0) {
-            int tgt = lvl_symbol_find(&st, arg);
-            if (tgt < 0) tgt = atoi(arg);
-            b1 = 0x04; b2 = 0x10 + (uint8_t)tgt;
-        } else if (strcmp(mnem, "JZ") == 0) {
-            int tgt = lvl_symbol_find(&st, arg);
-            if (tgt < 0) tgt = atoi(arg);
-            b1 = 0x04; b2 = 0x50 + (uint8_t)tgt;
-        } else if (strcmp(mnem, "JNZ") == 0) {
-            int tgt = lvl_symbol_find(&st, arg);
-            if (tgt < 0) tgt = atoi(arg);
-            b1 = 0x04; b2 = 0x90 + (uint8_t)tgt;
-        } else if (strcmp(mnem, "PRINT_NUM") == 0)  { b1 = 0x05; b2 = 0x01; }
-        else if (strcmp(mnem, "PRINT_STR") == 0) {
-            b1 = 0x05; b2 = 0x03;
-            is_string_inst = true;
-        } else if (strcmp(mnem, "PRINT_CHAR") == 0) { b1 = 0x05; b2 = 0x02; }
-        else if (strcmp(mnem, "PRINT_NL") == 0)   { b1 = 0x05; b2 = 0x04; }
-        else if (strcmp(mnem, "HALT") == 0)       { b1 = 0x05; b2 = 0xFF; }
-        else return LVL_ERR_COMPILATION_FAILED;
-
-        out_bytecode[out_offset++] = b1;
-        out_bytecode[out_offset++] = b2;
-
-        if (is_string_inst) {
-            char *str_start = strchr(arg, '"');
-            if (str_start) {
-                str_start++;
-                char *str_end = strrchr(str_start, '"');
-                if (str_end) *str_end = '\0';
-            } else str_start = arg;
-
-            size_t str_len = strlen(str_start);
-            for (size_t s = 0; s < str_len; s++) {
-                if (str_start[s] == '\\' && str_start[s+1] == 'n') {
-                    out_bytecode[out_offset++] = '\n';
-                    s++;
-                } else out_bytecode[out_offset++] = str_start[s];
-            }
-            out_bytecode[out_offset++] = '\0';
-            if (out_offset % 2 != 0) out_bytecode[out_offset++] = 0x00;
-        }
-    }
-
-    *out_size = out_offset;
-    return LVL_OK;
-}
 
 #endif /* LVLANG_IMPLEMENTATION */
