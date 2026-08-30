@@ -9,6 +9,7 @@
 #include "lvlang.h"
 #include "../lvlang-system/system_plugin.c"
 #include "../lvlang-crypto/crypto_plugin.c"
+#include "../lvlang-keyboard/keyboard_plugin.c"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -125,6 +126,7 @@ int main(int argc, char **argv) {
     lvl_init(&vm, bytecode, bytecode_size);
     lvl_plugin_system_init(&vm);
     lvl_plugin_crypto_init(&vm);
+    lvl_plugin_keyboard_init(&vm);
     lvl_run(&vm);
 
     printf("\n[VM Halted] Exit Status: %d (IP: %zu)\n", lvl_get_status(&vm), vm.ip);

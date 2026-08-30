@@ -13,6 +13,7 @@
 - ⚡ **Core Engine & JIT Runtime**: [dotdok132/LVLang](https://github.com/dotdok132/LVLang)
 - 🔐 **Cryptography Plugin**: [dotdok132/lvlang-crypto](https://github.com/dotdok132/lvlang-crypto) (`LibID 0x02` — SHA256 & AES)
 - 🖥️ **System OS Plugin**: [dotdok132/lvlang-system](https://github.com/dotdok132/lvlang-system) (`LibID 0x03` — Shell Commands, File I/O, Env Vars)
+- ⌨️ **Keyboard Interaction Plugin**: [dotdok132/lvlang-keyboard](https://github.com/dotdok132/lvlang-keyboard) (`LibID 0x05` — Keypress Polling, Key State Checks, Line Input)
 
 ---
 
