@@ -60,14 +60,23 @@ Every instruction occupies **strictly 2 bytes**: `[Opcode: 1 Byte] [Operand/Reg:
 | `0x03` | `0x05` | `GTE` | Push $1$ if $a \ge b$ else $0$ |
 | `0x03` | `0x06` | `LTE` | Push $1$ if $a \le b$ else $0$ |
 
-### 4. Control Flow & Jumps (`0x04`)
+### 4. Control Flow & Subroutines (`0x04`)
 | Opcode (Hex) | Operand (Hex) | Name | Description |
 |---|---|---|---|
 | `0x04` | `0x10 + Target` | `JMP` | Unconditional jump to 16-bit instruction index `Target` |
 | `0x04` | `0x50 + Target` | `JZ` | Jump to `Target` if stack top $== 0$ |
 | `0x04` | `0x90 + Target` | `JNZ` | Jump to `Target` if stack top $\neq 0$ |
+| `0x04` | `0xD0 + Target` | `CALL` | **Macro Subroutine Call**: Push return `ip`, jump to `Target` |
+| `0x04` | `0x00` | `RET` | **Return from Subroutine**: Pop return `ip` and resume |
 
-### 5. I/O & System (`0x05`)
+### 5. Macro Shortcut Opcodes (`0x07` — 1-Command Abbreviations)
+| Opcode (Hex) | Operand (Hex) | Name | Description |
+|---|---|---|---|
+| `0x07` | `0x10 + R` | `MACRO_PRINT_REG` | Print register $R_i$ + newline `\n` (Replaces LOAD + PRINT_NUM + PRINT_NL) |
+| `0x07` | `0x30 + R` | `MACRO_PRINT_REG_RAW` | Print register $R_i$ (no newline) |
+| `0x07` | `0x40 + R` | `MACRO_CLEAR_REG` | Zero out register $R_i$ ($R_i \leftarrow 0$) |
+
+### 6. I/O & System (`0x05`)
 | Opcode (Hex) | Operand (Hex) | Name | Description |
 |---|---|---|---|
 | `0x05` | `0x01` | `PRINT_NUM` | Print integer from stack top |

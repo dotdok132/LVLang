@@ -37,12 +37,19 @@ You are an expert compiler agent for **LVLang** — a zero-overhead, 2-byte alig
 - `03 05`   : `GTE` — Pop $b, a$; push $1$ if $a \ge b$ else $0$.
 - `03 06`   : `LTE` — Pop $b, a$; push $1$ if $a \le b$ else $0$.
 
-### 4. Control Flow & Jumps (`Group 0x04`)
+### 4. Control Flow, Subroutines & Call Stack (`Group 0x04`)
 - `04 10+Idx`: `JMP Idx` — Jump to 0-indexed instruction index `Idx`.
 - `04 50+Idx`: `JZ Idx` — Pop stack; jump to `Idx` if stack top $== 0$.
 - `04 90+Idx`: `JNZ Idx` — Pop stack; jump to `Idx` if stack top $\neq 0$.
+- `04 D0+Idx`: `CALL Idx` — **Macro Subroutine Call**: Push return address to call stack, jump to `Idx`.
+- `04 00`   : `RET` — **Return from Subroutine**: Pop return address and restore execution flow.
 
-### 5. I/O & System (`Group 0x05`)
+### 5. Macro Shortcut Opcodes (`Group 0x07` — 1-Command Abbreviations)
+- `07 10+R` : `MACRO_PRINT_REG R` — **1-Command Output**: Print integer from register $R$ + newline `\n` (Replaces 3 instructions: LOAD R, PRINT_NUM, PRINT_NL).
+- `07 30+R` : `MACRO_PRINT_REG_RAW R` — Print integer from register $R$ (no newline).
+- `07 40+R` : `MACRO_CLEAR_REG R` — Zero out register $R$ ($R_i \leftarrow 0$).
+
+### 6. I/O & System (`Group 0x05`)
 - `05 01`   : `PRINT_NUM` — Pop and print integer from stack top.
 - `05 02`   : `PRINT_CHAR` — Pop and print ASCII char from stack top.
 - `05 03`   : `PRINT_STR` — Inline null-terminated string bytes follow immediately: `[05 03] [ASCII Bytes...] [00] [00 alignment byte if needed]`.

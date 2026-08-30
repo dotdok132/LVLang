@@ -220,23 +220,43 @@ int lvl_step(lvl_vm_t *vm) {
             else vm->status = LVL_ERR_INVALID_OPCODE;
             break;
 
-        /* MODULE 0x04: FLOW CONTROL */
+        /* MODULE 0x04: FLOW CONTROL & SUBROUTINES */
         case 0x04:
-            if (b2 >= 0x10 && b2 <= 0x4F) {
+            if (b2 == 0x00) {
+                /* RET: Return from subroutine */
+                if (vm->csp > 0) {
+                    vm->ip = vm->call_stack[--vm->csp];
+                } else {
+                    vm->status = LVL_ERR_CALL_STACK_UNDERFLOW;
+                }
+            } else if (b2 >= 0x10 && b2 <= 0x4F) {
+                /* JMP Target */
                 target_byte = (size_t)(b2 - 0x10) * 2;
                 if (target_byte < vm->bytecode_size) vm->ip = target_byte;
                 else vm->status = LVL_ERR_OUT_OF_BOUNDS;
             } else if (b2 >= 0x50 && b2 <= 0x8F) {
+                /* JZ Target */
                 if (lvl_pop(vm, &a) && a == 0) {
                     target_byte = (size_t)(b2 - 0x50) * 2;
                     if (target_byte < vm->bytecode_size) vm->ip = target_byte;
                     else vm->status = LVL_ERR_OUT_OF_BOUNDS;
                 }
             } else if (b2 >= 0x90 && b2 <= 0xCF) {
+                /* JNZ Target */
                 if (lvl_pop(vm, &a) && a != 0) {
                     target_byte = (size_t)(b2 - 0x90) * 2;
                     if (target_byte < vm->bytecode_size) vm->ip = target_byte;
                     else vm->status = LVL_ERR_OUT_OF_BOUNDS;
+                }
+            } else if (b2 >= 0xD0 && b2 <= 0xFD) {
+                /* CALL Target: Macro / Subroutine Call */
+                if (vm->csp < LVL_CALL_STACK_SIZE) {
+                    vm->call_stack[vm->csp++] = vm->ip;
+                    target_byte = (size_t)(b2 - 0xD0) * 2;
+                    if (target_byte < vm->bytecode_size) vm->ip = target_byte;
+                    else vm->status = LVL_ERR_OUT_OF_BOUNDS;
+                } else {
+                    vm->status = LVL_ERR_CALL_STACK_OVERFLOW;
                 }
             } else {
                 vm->status = LVL_ERR_INVALID_OPCODE;
@@ -259,6 +279,28 @@ int lvl_step(lvl_vm_t *vm) {
                 case 0x04: if (vm->print_char) vm->print_char('\n'); break;
                 case 0xFF: vm->status = LVL_STATUS_HALT; break;
                 default: vm->status = LVL_ERR_INVALID_OPCODE; break;
+            }
+            break;
+
+        /* MODULE 0x07: MACRO / SHORTCUT OPCODES */
+        case 0x07:
+            if (b2 >= 0x10 && b2 <= 0x1F) {
+                /* MACRO_PRINT_REG (0x10 + R): Load R, PRINT_NUM, PRINT_NL */
+                uint8_t reg = b2 - 0x10;
+                int32_t val = vm->registers[reg];
+                if (vm->print_num) vm->print_num(val);
+                if (vm->print_char) vm->print_char('\n');
+            } else if (b2 >= 0x30 && b2 <= 0x3F) {
+                /* MACRO_PRINT_REG_RAW (0x30 + R): Load R, PRINT_NUM */
+                uint8_t reg = b2 - 0x30;
+                int32_t val = vm->registers[reg];
+                if (vm->print_num) vm->print_num(val);
+            } else if (b2 >= 0x40 && b2 <= 0x4F) {
+                /* MACRO_CLEAR_REG (0x40 + R): Clear R to 0 */
+                uint8_t reg = b2 - 0x40;
+                vm->registers[reg] = 0;
+            } else {
+                vm->status = LVL_ERR_INVALID_OPCODE;
             }
             break;
 
