@@ -1,0 +1,11 @@
+# Executables
+lvlc
+benchmark
+*.out
+*.exe
+
+# Bytecode & Object files
+*.lvl
+*.o
+*.so
+*.a
