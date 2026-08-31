@@ -271,6 +271,31 @@ int lvl_step(lvl_vm_t *vm) {
                 if (lvl_pop(vm, &a)) { lvl_push(vm, a); lvl_push(vm, a); }
             } else if (b2 == 0x03) {
                 if (lvl_pop(vm, &b) && lvl_pop(vm, &a)) { lvl_push(vm, b); lvl_push(vm, a); }
+            } else if (b2 == 0x06) {
+                int32_t count, start_idx;
+                if (lvl_pop(vm, &count) && lvl_pop(vm, &start_idx)) {
+                    for (int32_t i = 0; i < count; i++) {
+                        if (start_idx + i >= 0 && start_idx + i < LVL_RAM_SIZE) {
+                            vm->ram[start_idx + i] = 0;
+                        } else {
+                            vm->status = LVL_ERR_OUT_OF_BOUNDS;
+                            break;
+                        }
+                    }
+                }
+            } else if (b2 == 0x07) {
+                int32_t count, src_idx, dst_idx;
+                if (lvl_pop(vm, &count) && lvl_pop(vm, &src_idx) && lvl_pop(vm, &dst_idx)) {
+                    for (int32_t i = 0; i < count; i++) {
+                        if (src_idx + i >= 0 && src_idx + i < LVL_RAM_SIZE &&
+                            dst_idx + i >= 0 && dst_idx + i < LVL_RAM_SIZE) {
+                            vm->ram[dst_idx + i] = vm->ram[src_idx + i];
+                        } else {
+                            vm->status = LVL_ERR_OUT_OF_BOUNDS;
+                            break;
+                        }
+                    }
+                }
             } else if (b2 >= 0x10 && b2 <= 0x1F) {
                 uint8_t reg = b2 - 0x10;
                 lvl_push(vm, vm->registers[reg]);
@@ -371,6 +396,12 @@ int lvl_step(lvl_vm_t *vm) {
                     if (b == 0) vm->status = LVL_ERR_DIVISION_BY_ZERO;
                     else lvl_push(vm, a % b);
                 }
+            } else if (b2 == 0x06) {
+                if (vm->sp > 0) vm->stack[vm->sp - 1]++;
+                else vm->status = LVL_ERR_STACK_UNDERFLOW;
+            } else if (b2 == 0x07) {
+                if (vm->sp > 0) vm->stack[vm->sp - 1]--;
+                else vm->status = LVL_ERR_STACK_UNDERFLOW;
             } else if (b2 >= 0x10 && b2 <= 0x1F) {
                 uint8_t reg = b2 - 0x10;
                 vm->registers[reg]++;
@@ -553,8 +584,21 @@ int lvl_step(lvl_vm_t *vm) {
                     break;
                 }
                 case 0x06: {
-                    int ch = getchar();
-                    lvl_push(vm, (int32_t)(ch != EOF ? ch : 0));
+                    int32_t val = 0;
+                    if (scanf("%d", &val) == 1) {
+                        lvl_push(vm, val);
+                    } else {
+                        lvl_push(vm, 0);
+                    }
+                    break;
+                }
+                case 0x07: {
+                    float val = 0.0f;
+                    if (scanf("%f", &val) == 1) {
+                        lvl_push(vm, lvl_float_to_bits(val));
+                    } else {
+                        lvl_push(vm, 0);
+                    }
                     break;
                 }
                 case 0xFF: vm->status = LVL_STATUS_HALT; break;
@@ -826,6 +870,74 @@ int lvl_step(lvl_vm_t *vm) {
                         float fa = lvl_bits_to_float(a);
                         float fb = lvl_bits_to_float(b);
                         lvl_push(vm, (fa < fb) ? 1 : 0);
+                    }
+                    break;
+                }
+                case 0x0D: { /* FFLOOR */
+                    if (lvl_pop(vm, &a)) {
+                        lvl_push(vm, lvl_float_to_bits(floorf(lvl_bits_to_float(a))));
+                    }
+                    break;
+                }
+                case 0x0E: { /* FCEIL */
+                    if (lvl_pop(vm, &a)) {
+                        lvl_push(vm, lvl_float_to_bits(ceilf(lvl_bits_to_float(a))));
+                    }
+                    break;
+                }
+                case 0x0F: { /* FROUND */
+                    if (lvl_pop(vm, &a)) {
+                        lvl_push(vm, lvl_float_to_bits(roundf(lvl_bits_to_float(a))));
+                    }
+                    break;
+                }
+                case 0x10: { /* FMOD */
+                    if (lvl_pop(vm, &b) && lvl_pop(vm, &a)) {
+                        lvl_push(vm, lvl_float_to_bits(fmodf(lvl_bits_to_float(a), lvl_bits_to_float(b))));
+                    }
+                    break;
+                }
+                case 0x11: { /* FPOW */
+                    if (lvl_pop(vm, &b) && lvl_pop(vm, &a)) {
+                        lvl_push(vm, lvl_float_to_bits(powf(lvl_bits_to_float(a), lvl_bits_to_float(b))));
+                    }
+                    break;
+                }
+                case 0x12: { /* FSIN */
+                    if (lvl_pop(vm, &a)) {
+                        lvl_push(vm, lvl_float_to_bits(sinf(lvl_bits_to_float(a))));
+                    }
+                    break;
+                }
+                case 0x13: { /* FCOS */
+                    if (lvl_pop(vm, &a)) {
+                        lvl_push(vm, lvl_float_to_bits(cosf(lvl_bits_to_float(a))));
+                    }
+                    break;
+                }
+                case 0x14: { /* FTAN */
+                    if (lvl_pop(vm, &a)) {
+                        lvl_push(vm, lvl_float_to_bits(tanf(lvl_bits_to_float(a))));
+                    }
+                    break;
+                }
+                case 0x15: { /* FMIN */
+                    if (lvl_pop(vm, &b) && lvl_pop(vm, &a)) {
+                        float fa = lvl_bits_to_float(a), fb = lvl_bits_to_float(b);
+                        lvl_push(vm, lvl_float_to_bits(fa < fb ? fa : fb));
+                    }
+                    break;
+                }
+                case 0x16: { /* FMAX */
+                    if (lvl_pop(vm, &b) && lvl_pop(vm, &a)) {
+                        float fa = lvl_bits_to_float(a), fb = lvl_bits_to_float(b);
+                        lvl_push(vm, lvl_float_to_bits(fa > fb ? fa : fb));
+                    }
+                    break;
+                }
+                case 0x17: { /* FLOG */
+                    if (lvl_pop(vm, &a)) {
+                        lvl_push(vm, lvl_float_to_bits(logf(lvl_bits_to_float(a))));
                     }
                     break;
                 }

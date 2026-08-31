@@ -22,6 +22,7 @@ run_test() {
     local name="$1"
     local expected="$2"
     local bytecode="$3"
+    local stdin="$4"
 
     TOTAL=$((TOTAL + 1))
     
@@ -29,7 +30,11 @@ run_test() {
     # We use awk to extract everything between "Output: " and "[VM Halted]".
     # Newlines are preserved as literal '\n' sequences in the string to make exact matching simple in bash.
     local raw_output
-    raw_output=$("$LVLC" "$bytecode" 2>/dev/null | awk '/^Output: /{flag=1; sub(/^Output: /, ""); printf "%s", $0; next} /^\[VM Halted\]/{flag=0; next} flag{printf "\\n%s", $0}')
+    if [ -n "$stdin" ]; then
+        raw_output=$(echo "$stdin" | "$LVLC" "$bytecode" 2>/dev/null | awk '/^Output: /{flag=1; sub(/^Output: /, ""); printf "%s", $0; next} /^\[VM Halted\]/{flag=0; next} flag{printf "\\n%s", $0}')
+    else
+        raw_output=$("$LVLC" "$bytecode" 2>/dev/null | awk '/^Output: /{flag=1; sub(/^Output: /, ""); printf "%s", $0; next} /^\[VM Halted\]/{flag=0; next} flag{printf "\\n%s", $0}')
+    fi
 
     if [ "$raw_output" = "$expected" ]; then
         echo -e "[\033[32mPASS\033[0m] $name"
@@ -102,6 +107,14 @@ run_test "0x0D JZ (Not Taken)" "59" "01810D02018505010189050105FF"
 # Group 0x0F: Conditional jump forward (JNZ)
 run_test "0x0F JNZ (Taken)" "9" "01810F02018505010189050105FF"
 run_test "0x0F JNZ (Not Taken)" "59" "01800F02018505010189050105FF"
+
+# New tests
+run_test "0x0A FFLOOR" "13" "018D0A050A0D0A06050105FF"
+run_test "0x0A FCEIL" "13" "018D0A050A0E0A06050105FF"
+run_test "0x0A FMOD" "1.000000" "01890A0501840A050A100A0705FF"
+run_test "0x02 INC_STACK" "6" "01850206050105FF"
+run_test "0x02 DEC_STACK" "4" "01850207050105FF"
+run_test "0x05 READ_INT" "77" "0506050105FF" "77"
 
 echo "=== Summary ==="
 echo "$PASSED/$TOTAL tests passed"

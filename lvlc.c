@@ -13,6 +13,9 @@
 #include "../lvlang-sdl2/sdl2_plugin.c"
 #include "../lvlang-time/time_plugin.c"
 #include "../lvlang-string/string_plugin.c"
+#include "../lvlang-ansi/ansi_plugin.c"
+#include "../lvlang-heap/heap_plugin.c"
+#include "../lvlang-net/net_plugin.c"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -129,6 +132,8 @@ static int validate_bytecode(const uint8_t *code, size_t sz, bool verbose) {
             else if (b2 == 0x03) { if (verbose) printf("SWAP\n"); inst_count++; }
             else if (b2 == 0x04) { if (verbose) printf("PUSH_SHIFT_8\n"); inst_count++; }
             else if (b2 == 0x05) { if (verbose) printf("PUSH_SHIFT_16\n"); inst_count++; }
+            else if (b2 == 0x06) { if (verbose) printf("MEMSET\n"); inst_count++; }
+            else if (b2 == 0x07) { if (verbose) printf("MEMCPY\n"); inst_count++; }
             else if (b2 >= 0x10 && b2 <= 0x1F) { if (verbose) printf("LOAD R%d\n", b2 - 0x10); inst_count++; }
             else if (b2 >= 0x30 && b2 <= 0x3F) { if (verbose) printf("STORE R%d\n", b2 - 0x30); inst_count++; }
             else if (b2 >= 0x40 && b2 <= 0x4F) { if (verbose) printf("LOAD_RAM R%d\n", b2 - 0x40); inst_count++; }
@@ -144,6 +149,8 @@ static int validate_bytecode(const uint8_t *code, size_t sz, bool verbose) {
             else if (b2 == 0x03) { if (verbose) printf("MUL\n"); inst_count++; }
             else if (b2 == 0x04) { if (verbose) printf("DIV\n"); inst_count++; }
             else if (b2 == 0x05) { if (verbose) printf("MOD\n"); inst_count++; }
+            else if (b2 == 0x06) { if (verbose) printf("INC_STACK\n"); inst_count++; }
+            else if (b2 == 0x07) { if (verbose) printf("DEC_STACK\n"); inst_count++; }
             else if (b2 >= 0x10 && b2 <= 0x1F) { if (verbose) printf("INC R%d\n", b2 - 0x10); inst_count++; }
             else if (b2 >= 0x20 && b2 <= 0x2F) { if (verbose) printf("DEC R%d\n", b2 - 0x20); inst_count++; }
             else if (b2 == 0x40) { if (verbose) printf("FADD\n"); inst_count++; }
@@ -226,7 +233,8 @@ static int validate_bytecode(const uint8_t *code, size_t sz, bool verbose) {
             }
             else if (b2 == 0x04) { if (verbose) printf("PRINT_NL\n"); inst_count++; }
             else if (b2 == 0x05) { if (verbose) printf("SCAN_NUM\n"); inst_count++; }
-            else if (b2 == 0x06) { if (verbose) printf("SCAN_CHAR\n"); inst_count++; }
+            else if (b2 == 0x06) { if (verbose) printf("READ_INT\n"); inst_count++; }
+            else if (b2 == 0x07) { if (verbose) printf("READ_FLOAT\n"); inst_count++; }
             else if (b2 == 0xFF) { if (verbose) printf("HALT\n"); has_halt = true; inst_count++; }
             else { if (verbose) printf("OP %02X %02X\n", b1, b2); inst_count++; }
         } else if (b1 == 0x06) {
@@ -260,6 +268,17 @@ static int validate_bytecode(const uint8_t *code, size_t sz, bool verbose) {
             else if (b2 == 0x08) { if (verbose) printf("FSQRT\n"); inst_count++; }
             else if (b2 == 0x09) { if (verbose) printf("FABS\n"); inst_count++; }
             else if (b2 == 0x0A) { if (verbose) printf("FEQ\n"); inst_count++; }
+            else if (b2 == 0x0D) { if (verbose) printf("FFLOOR\n"); inst_count++; }
+            else if (b2 == 0x0E) { if (verbose) printf("FCEIL\n"); inst_count++; }
+            else if (b2 == 0x0F) { if (verbose) printf("FROUND\n"); inst_count++; }
+            else if (b2 == 0x10) { if (verbose) printf("FMOD\n"); inst_count++; }
+            else if (b2 == 0x11) { if (verbose) printf("FPOW\n"); inst_count++; }
+            else if (b2 == 0x12) { if (verbose) printf("FSIN\n"); inst_count++; }
+            else if (b2 == 0x13) { if (verbose) printf("FCOS\n"); inst_count++; }
+            else if (b2 == 0x14) { if (verbose) printf("FTAN\n"); inst_count++; }
+            else if (b2 == 0x15) { if (verbose) printf("FMIN\n"); inst_count++; }
+            else if (b2 == 0x16) { if (verbose) printf("FMAX\n"); inst_count++; }
+            else if (b2 == 0x17) { if (verbose) printf("FLOG\n"); inst_count++; }
             else { if (verbose) printf("OP %02X %02X\n", b1, b2); inst_count++; }
         } else if (b1 == 0x0B) {
             if (verbose) { printf("JMP_REL_FWD %d\n", b2); }
@@ -382,6 +401,9 @@ int main(int argc, char **argv) {
     lvl_plugin_sdl2_init(&vm);
     lvl_plugin_time_init(&vm);
     lvl_plugin_string_init(&vm);
+    lvl_plugin_ansi_init(&vm);
+    lvl_plugin_heap_init(&vm);
+    lvl_plugin_net_init(&vm);
 
     if (trace_execution) {
         printf("\n--- SINGLE-STEP VM EXECUTION TRACE ---\n");
