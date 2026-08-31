@@ -44,6 +44,11 @@ graph LR
 - 🐍 **Python SDK Binding**: [dotdok132/lvlang-python](https://github.com/dotdok132/lvlang-python) (Native Python SDK for AI agents & Py applications)
 - 🟢 **JavaScript / Node.js SDK**: [dotdok132/lvlang-js](https://github.com/dotdok132/lvlang-js) (Node.js & Web JS SDK for web apps)
 - ⚙️ **C / C++ / C# (.NET) SDK**: [dotdok132/lvlang-cpp-cs](https://github.com/dotdok132/lvlang-cpp-cs) (Header-only C++17, C, and C# .NET SDKs)
+- 🦀 **Rust Crate SDK**: [dotdok132/lvlang-rs](https://github.com/dotdok132/lvlang-rs) (Native Rust crate binding)
+- 🐹 **Go Module SDK**: [dotdok132/lvlang-go](https://github.com/dotdok132/lvlang-go) (Native Go module binding)
+- ☕ **Java & Kotlin SDK**: [dotdok132/lvlang-java](https://github.com/dotdok132/lvlang-java) (Java & Kotlin SDK package)
+- 🐘 **PHP SDK Library**: [dotdok132/lvlang-php](https://github.com/dotdok132/lvlang-php) (Composer PHP SDK library)
+- 💎 **Ruby Gem SDK**: [dotdok132/lvlang-rb](https://github.com/dotdok132/lvlang-rb) (Ruby Gem SDK package)
 
 ---
 
