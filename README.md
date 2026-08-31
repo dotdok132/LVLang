@@ -43,6 +43,7 @@ graph LR
 - 🔐 **Cryptography Plugin**: [dotdok132/lvlang-crypto](https://github.com/dotdok132/lvlang-crypto) (`LibID 0x02` — SHA256 & AES)
 - 🐍 **Python SDK Binding**: [dotdok132/lvlang-python](https://github.com/dotdok132/lvlang-python) (Native Python SDK for AI agents & Py applications)
 - 🟢 **JavaScript / Node.js SDK**: [dotdok132/lvlang-js](https://github.com/dotdok132/lvlang-js) (Node.js & Web JS SDK for web apps)
+- ⚙️ **C / C++ / C# (.NET) SDK**: [dotdok132/lvlang-cpp-cs](https://github.com/dotdok132/lvlang-cpp-cs) (Header-only C++17, C, and C# .NET SDKs)
 
 ---
 
