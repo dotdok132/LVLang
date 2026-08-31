@@ -42,6 +42,17 @@ You are an expert compiler agent for **LVLang** — a zero-overhead, 2-byte alig
 - `0A 0A`   : `FEQ`   — Pop $b, a$ (floats); push 1 if $a == b$ else 0.
 - `0A 0B`   : `FGT`   — Pop $b, a$ (floats); push 1 if $a > b$ else 0.
 - `0A 0C`   : `FLT`   — Pop $b, a$ (floats); push 1 if $a < b$ else 0.
+- `0A 0D`   : `FFLOOR` — Pop float $a$; push $\lfloor a \rfloor$.
+- `0A 0E`   : `FCEIL`  — Pop float $a$; push $\lceil a \rceil$.
+- `0A 0F`   : `FROUND` — Pop float $a$; push $\text{round}(a)$.
+- `0A 10`   : `FMOD`   — Pop $b, a$ (floats); push $a \pmod b$ (float).
+- `0A 11`   : `FPOW`   — Pop $b, a$ (floats); push $a^b$.
+- `0A 12`   : `FSIN`   — Pop float $a$; push $\sin(a)$.
+- `0A 13`   : `FCOS`   — Pop float $a$; push $\cos(a)$.
+- `0A 14`   : `FTAN`   — Pop float $a$; push $\tan(a)$.
+- `0A 15`   : `FMIN`   — Pop $b, a$ (floats); push $\min(a, b)$.
+- `0A 16`   : `FMAX`   — Pop $b, a$ (floats); push $\max(a, b)$.
+- `0A 17`   : `FLOG`   — Pop float $a$; push $\ln(a)$.
 
 ### 3. Comparisons (`Group 0x03`)
 - `03 01`   : `EQ` — Pop $b, a$; push $1$ if $a == b$ else $0$.
@@ -78,7 +89,21 @@ You are an expert compiler agent for **LVLang** — a zero-overhead, 2-byte alig
 - `05 02`   : `PRINT_CHAR` — Pop and print ASCII char from stack top.
 - `05 03`   : `PRINT_STR` — Inline null-terminated string bytes follow immediately.
 - `05 04`   : `PRINT_NL` — Print newline character `\n`.
+- `05 05`   : `READ_STR` — Read input string from stdin into RAM.
+- `05 06`   : `READ_INT` — Read integer from stdin, push onto stack.
+- `05 07`   : `READ_FLOAT` — Read float from stdin, push IEEE-754 bits onto stack.
 - `05 FF`   : `HALT` — Clean execution halt.
+
+### 7. Modular FFI Extension Catalog (`0E 01 LibID FuncID`)
+- `LibID 0x02` : `lvlang-crypto` — SHA256 & AES Cryptography
+- `LibID 0x03` : `lvlang-system` — System Calls & File I/O
+- `LibID 0x05` : `lvlang-keyboard` — Keyboard Key Polling
+- `LibID 0x06` : `lvlang-sdl2` — SDL2 2D Hardware Graphics
+- `LibID 0x07` : `lvlang-time` — High-Precision Time & Sleep
+- `LibID 0x08` : `lvlang-string` — String Manipulation & Parsing
+- `LibID 0x09` : `lvlang-heap` — Dynamic Memory Allocation (MALLOC/FREE)
+- `LibID 0x0A` : `lvlang-ansi` — ANSI Terminal Colors & Cursor
+- `LibID 0x0B` : `lvlang-net` — TCP Sockets & HTTP Networking
 
 ---
 
