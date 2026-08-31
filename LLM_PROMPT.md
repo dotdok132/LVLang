@@ -39,9 +39,11 @@ You are an expert compiler agent for **LVLang** — a zero-overhead, 2-byte alig
 - `03 03`   : `GT` — Pop $b, a$; push $1$ if $a > b$ else $0$.
 - `03 04`   : `LT` — Pop $b, a$; push $1$ if $a < b$ else $0$.
 
-### 4. Direct 1:1 Instruction Count Relative Jumps (`Group 0x09`, `0x0B`, `0x0C`)
+### 4. Direct 1:1 Instruction Count Relative Jumps (`Group 0x09`, `0x0B`, `0x0D`, `0x0F`)
 - `09 N`    : `JMP_REL_BACK N` — Jump **backward** $N$ instructions ($1 \le N \le 255$).
 - `0B N`    : `JMP_REL_FWD N`  — Jump **forward** $N$ instructions ($1 \le N \le 255$).
+- `0D N`    : `JZ_REL_FWD N`   — Pop $a$; jump **forward** $N$ instructions if $a == 0$.
+- `0F N`    : `JNZ_REL_FWD N`  — Pop $a$; jump **forward** $N$ instructions if $a \neq 0$.
 - `0C 01`   : `JZ_REL_BACK`    — Pop $N$, Pop $a$; jump **backward** $N$ instructions if $a == 0$.
 - `0C 02`   : `JNZ_REL_BACK`   — Pop $N$, Pop $a$; jump **backward** $N$ instructions if $a \neq 0$.
 

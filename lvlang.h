@@ -654,7 +654,7 @@ int lvl_step(lvl_vm_t *vm) {
             break;
         }
 
-        /* MODULE 0x0C: CONDITIONAL RELATIVE JUMPS (0Cx01..04 -> JZ/JNZ relative) */
+        /* MODULE 0x0C: CONDITIONAL RELATIVE JUMPS (STACK OPERAND) */
         case 0x0C: {
             if (b2 == 0x01) {
                 /* JZ_REL_BACK N: pop count from stack */
@@ -670,6 +670,40 @@ int lvl_step(lvl_vm_t *vm) {
                     if (vm->ip >= n * 2) vm->ip -= n * 2;
                     else vm->status = LVL_ERR_OUT_OF_BOUNDS;
                 }
+            } else if (b2 == 0x03) {
+                /* JZ_REL_FWD N: pop count from stack */
+                if (lvl_pop(vm, &b) && lvl_pop(vm, &a) && a == 0) {
+                    size_t n = (size_t)b;
+                    if (vm->ip + n * 2 <= vm->bytecode_size) vm->ip += n * 2;
+                    else vm->status = LVL_ERR_OUT_OF_BOUNDS;
+                }
+            } else if (b2 == 0x04) {
+                /* JNZ_REL_FWD N: pop count from stack */
+                if (lvl_pop(vm, &b) && lvl_pop(vm, &a) && a != 0) {
+                    size_t n = (size_t)b;
+                    if (vm->ip + n * 2 <= vm->bytecode_size) vm->ip += n * 2;
+                    else vm->status = LVL_ERR_OUT_OF_BOUNDS;
+                }
+            }
+            break;
+        }
+
+        /* MODULE 0x0D: DIRECT JZ RELATIVE FORWARD (0DxN -> Pop a, if a==0 jump forward N inst) */
+        case 0x0D: {
+            size_t n = (size_t)b2;
+            if (lvl_pop(vm, &a) && a == 0) {
+                if (vm->ip + n * 2 <= vm->bytecode_size) vm->ip += n * 2;
+                else vm->status = LVL_ERR_OUT_OF_BOUNDS;
+            }
+            break;
+        }
+
+        /* MODULE 0x0F: DIRECT JNZ RELATIVE FORWARD (0FxN -> Pop a, if a!=0 jump forward N inst) */
+        case 0x0F: {
+            size_t n = (size_t)b2;
+            if (lvl_pop(vm, &a) && a != 0) {
+                if (vm->ip + n * 2 <= vm->bytecode_size) vm->ip += n * 2;
+                else vm->status = LVL_ERR_OUT_OF_BOUNDS;
             }
             break;
         }
