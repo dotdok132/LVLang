@@ -11,6 +11,7 @@
 #include "../lvlang-crypto/crypto_plugin.c"
 #include "../lvlang-keyboard/keyboard_plugin.c"
 #include "../lvlang-sdl2/sdl2_plugin.c"
+#include "../lvlang-time/time_plugin.c"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -259,6 +260,7 @@ int main(int argc, char **argv) {
     lvl_plugin_crypto_init(&vm);
     lvl_plugin_keyboard_init(&vm);
     lvl_plugin_sdl2_init(&vm);
+    lvl_plugin_time_init(&vm);
 
     if (trace_execution) {
         printf("\n--- SINGLE-STEP VM EXECUTION TRACE ---\n");
