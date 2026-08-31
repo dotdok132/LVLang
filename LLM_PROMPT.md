@@ -49,6 +49,17 @@ You are an expert compiler agent for **LVLang** — a zero-overhead, 2-byte alig
 - `03 03`   : `GT` — Pop $b, a$; push $1$ if $a > b$ else $0$.
 - `03 04`   : `LT` — Pop $b, a$; push $1$ if $a < b$ else $0$.
 
+### 3.5. Bitwise & Logical Operations (`Group 0x04`)
+- `04 01`   : `AND` — Pop $b, a$; push $a \mathbin{\&} b$ (bitwise AND).
+- `04 02`   : `OR`  — Pop $b, a$; push $a \mathbin{|} b$ (bitwise OR).
+- `04 03`   : `XOR` — Pop $b, a$; push $a \oplus b$ (bitwise XOR).
+- `04 04`   : `BIT_NOT` — Pop $a$; push $\sim a$ (bitwise complement).
+- `04 05`   : `SHL` — Pop $b, a$; push $a \ll b$ (shift left).
+- `04 06`   : `SHR` — Pop $b, a$; push $a \gg b$ (shift right).
+- `04 07`   : `LOGICAL_NOT` — Pop $a$; push $1$ if $a == 0$, else $0$.
+- `04 08`   : `LOGICAL_AND` — Pop $b, a$; push $1$ if both $\neq 0$, else $0$.
+- `04 09`   : `LOGICAL_OR` — Pop $b, a$; push $1$ if either $\neq 0$, else $0$.
+
 ### 4. Direct 1:1 Instruction Count Relative Jumps (`Group 0x09`, `0x0B`, `0x0D`, `0x0F`)
 - `09 N`    : `JMP_REL_BACK N` — Jump **backward** $N$ instructions ($1 \le N \le 255$).
 - `0B N`    : `JMP_REL_FWD N`  — Jump **forward** $N$ instructions ($1 \le N \le 255$).

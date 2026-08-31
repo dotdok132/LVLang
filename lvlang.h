@@ -420,19 +420,28 @@ int lvl_step(lvl_vm_t *vm) {
             else vm->status = LVL_ERR_INVALID_OPCODE;
             break;
 
-        /* MODULE 0x04: FLOW CONTROL, SUBROUTINES & TRAPS */
+        /* MODULE 0x04: FLOW CONTROL, SUBROUTINES, TRAPS & BITWISE LOGIC */
         case 0x04:
-            if (b2 == 0x00) {
+            if (b2 == 0x01) { if (lvl_pop(vm, &b) && lvl_pop(vm, &a)) lvl_push(vm, a & b); }
+            else if (b2 == 0x02) { if (lvl_pop(vm, &b) && lvl_pop(vm, &a)) lvl_push(vm, a | b); }
+            else if (b2 == 0x03) { if (lvl_pop(vm, &b) && lvl_pop(vm, &a)) lvl_push(vm, a ^ b); }
+            else if (b2 == 0x04) { if (lvl_pop(vm, &a)) lvl_push(vm, ~a); }
+            else if (b2 == 0x05) { if (lvl_pop(vm, &b) && lvl_pop(vm, &a)) lvl_push(vm, a << b); }
+            else if (b2 == 0x06) { if (lvl_pop(vm, &b) && lvl_pop(vm, &a)) lvl_push(vm, a >> b); }
+            else if (b2 == 0x07) { if (lvl_pop(vm, &a)) lvl_push(vm, a == 0 ? 1 : 0); }
+            else if (b2 == 0x08) { if (lvl_pop(vm, &b) && lvl_pop(vm, &a)) lvl_push(vm, (a != 0 && b != 0) ? 1 : 0); }
+            else if (b2 == 0x09) { if (lvl_pop(vm, &b) && lvl_pop(vm, &a)) lvl_push(vm, (a != 0 || b != 0) ? 1 : 0); }
+            else if (b2 == 0x00) {
                 /* RET: Return from subroutine */
                 if (vm->csp > 0) {
                     vm->ip = vm->call_stack[--vm->csp];
                 } else {
                     vm->status = LVL_ERR_CALL_STACK_UNDERFLOW;
                 }
-            } else if (b2 == 0x01) {
+            } else if (b2 == 0x0A) {
                 /* YIELD: Async coroutine pause */
                 vm->status = LVL_STATUS_YIELD;
-            } else if (b2 == 0x05) {
+            } else if (b2 == 0x0B) {
                 /* SET_TRAP Target: Set Exception Catch Handler */
                 if (vm->ip + 1 < vm->bytecode_size) {
                     uint8_t low = vm->bytecode[vm->ip++];
@@ -440,7 +449,7 @@ int lvl_step(lvl_vm_t *vm) {
                     size_t far_inst = (size_t)(low | (high << 8));
                     vm->trap_ip = far_inst * 2;
                 }
-            } else if (b2 == 0x06) {
+            } else if (b2 == 0x0C) {
                 /* CLEAR_TRAP: Disable Exception Handler */
                 vm->trap_ip = 0;
             } else if (b2 >= 0x10 && b2 <= 0x4F) {

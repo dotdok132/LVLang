@@ -122,55 +122,171 @@ static int validate_bytecode(const uint8_t *code, size_t sz, bool verbose) {
 
         if (verbose) printf("Inst %3zu | Byte %3zu: [%02X %02X] ", cur_inst, start_ip, b1, b2);
 
-        if (b1 == 0x01 && b2 == 0x04) {
-            if (verbose) printf("PUSH_SHIFT_8\n");
-            inst_count++;
-        } else if (b1 == 0x01 && b2 == 0x05) {
-            if (verbose) printf("PUSH_SHIFT_16\n");
-            inst_count++;
-        } else if (b1 == 0x05 && b2 == 0x03) {
-            if (verbose) printf("PRINT_STR \"");
-            while (ip < sz && code[ip] != 0) {
-                if (verbose) putchar(code[ip]);
-                ip++;
-            }
-            if (verbose) printf("\"\n");
-            if (ip < sz && code[ip] == 0) ip++;
-            if (ip % 2 != 0) ip++;
-            inst_count = ip / 2;
-        } else if (b1 == 0x04 && (b2 == 0xFC || b2 == 0xFD || b2 == 0xFE)) {
-            if (ip + 2 <= sz) {
-                uint8_t low = code[ip++];
-                uint8_t high = code[ip++];
-                uint16_t target_inst = low | (high << 8);
-                size_t target_byte = target_inst * 2;
-                const char *jump_type = (b2 == 0xFC) ? "JZ_FAR" : (b2 == 0xFD ? "JNZ_FAR" : "JMP_FAR");
-                if (target_byte <= sz) {
-                    if (verbose) printf("%s -> Inst %d (Byte %zu) [OK]\n", jump_type, target_inst, target_byte);
+        if (b1 == 0x01) {
+            if (b2 >= 0x80) { if (verbose) printf("PUSH_IMM %d\n", b2 & 0x7F); inst_count++; }
+            else if (b2 == 0x01) { if (verbose) printf("POP\n"); inst_count++; }
+            else if (b2 == 0x02) { if (verbose) printf("DUP\n"); inst_count++; }
+            else if (b2 == 0x03) { if (verbose) printf("SWAP\n"); inst_count++; }
+            else if (b2 == 0x04) { if (verbose) printf("PUSH_SHIFT_8\n"); inst_count++; }
+            else if (b2 == 0x05) { if (verbose) printf("PUSH_SHIFT_16\n"); inst_count++; }
+            else if (b2 >= 0x10 && b2 <= 0x1F) { if (verbose) printf("LOAD R%d\n", b2 - 0x10); inst_count++; }
+            else if (b2 >= 0x30 && b2 <= 0x3F) { if (verbose) printf("STORE R%d\n", b2 - 0x30); inst_count++; }
+            else if (b2 >= 0x40 && b2 <= 0x4F) { if (verbose) printf("LOAD_RAM R%d\n", b2 - 0x40); inst_count++; }
+            else if (b2 >= 0x50 && b2 <= 0x5F) { if (verbose) printf("STORE_RAM R%d\n", b2 - 0x50); inst_count++; }
+            else if (b2 == 0x60) { if (verbose) printf("MALLOC\n"); inst_count++; }
+            else if (b2 == 0x61) { if (verbose) printf("FREE\n"); inst_count++; }
+            else if (b2 == 0x62) { if (verbose) printf("LOAD_HEAP\n"); inst_count++; }
+            else if (b2 == 0x63) { if (verbose) printf("STORE_HEAP\n"); inst_count++; }
+            else { if (verbose) printf("OP %02X %02X\n", b1, b2); inst_count++; }
+        } else if (b1 == 0x02) {
+            if (b2 == 0x01) { if (verbose) printf("ADD\n"); inst_count++; }
+            else if (b2 == 0x02) { if (verbose) printf("SUB\n"); inst_count++; }
+            else if (b2 == 0x03) { if (verbose) printf("MUL\n"); inst_count++; }
+            else if (b2 == 0x04) { if (verbose) printf("DIV\n"); inst_count++; }
+            else if (b2 == 0x05) { if (verbose) printf("MOD\n"); inst_count++; }
+            else if (b2 >= 0x10 && b2 <= 0x1F) { if (verbose) printf("INC R%d\n", b2 - 0x10); inst_count++; }
+            else if (b2 >= 0x20 && b2 <= 0x2F) { if (verbose) printf("DEC R%d\n", b2 - 0x20); inst_count++; }
+            else if (b2 == 0x40) { if (verbose) printf("FADD\n"); inst_count++; }
+            else if (b2 == 0x41) { if (verbose) printf("FSUB\n"); inst_count++; }
+            else if (b2 == 0x42) { if (verbose) printf("FMUL\n"); inst_count++; }
+            else if (b2 == 0x43) { if (verbose) printf("FDIV\n"); inst_count++; }
+            else { if (verbose) printf("OP %02X %02X\n", b1, b2); inst_count++; }
+        } else if (b1 == 0x03) {
+            if (b2 == 0x01) { if (verbose) printf("EQ\n"); inst_count++; }
+            else if (b2 == 0x02) { if (verbose) printf("NEQ\n"); inst_count++; }
+            else if (b2 == 0x03) { if (verbose) printf("GT\n"); inst_count++; }
+            else if (b2 == 0x04) { if (verbose) printf("LT\n"); inst_count++; }
+            else if (b2 == 0x05) { if (verbose) printf("GTE\n"); inst_count++; }
+            else if (b2 == 0x06) { if (verbose) printf("LTE\n"); inst_count++; }
+            else if (b2 == 0x07) { if (verbose) printf("AND\n"); inst_count++; }
+            else if (b2 == 0x08) { if (verbose) printf("OR\n"); inst_count++; }
+            else if (b2 == 0x09) { if (verbose) printf("NOT\n"); inst_count++; }
+            else { if (verbose) printf("OP %02X %02X\n", b1, b2); inst_count++; }
+        } else if (b1 == 0x04) {
+            if (b2 == 0x00) { if (verbose) printf("RET\n"); inst_count++; }
+            else if (b2 == 0x01) { if (verbose) printf("AND\n"); inst_count++; }
+            else if (b2 == 0x02) { if (verbose) printf("OR\n"); inst_count++; }
+            else if (b2 == 0x03) { if (verbose) printf("XOR\n"); inst_count++; }
+            else if (b2 == 0x04) { if (verbose) printf("BIT_NOT\n"); inst_count++; }
+            else if (b2 == 0x05) { if (verbose) printf("SHL\n"); inst_count++; }
+            else if (b2 == 0x06) { if (verbose) printf("SHR\n"); inst_count++; }
+            else if (b2 == 0x07) { if (verbose) printf("LOGICAL_NOT\n"); inst_count++; }
+            else if (b2 == 0x08) { if (verbose) printf("LOGICAL_AND\n"); inst_count++; }
+            else if (b2 == 0x09) { if (verbose) printf("LOGICAL_OR\n"); inst_count++; }
+            else if (b2 == 0x0A) { if (verbose) printf("YIELD\n"); inst_count++; }
+            else if (b2 == 0x0B) {
+                if (ip + 2 <= sz) {
+                    uint8_t low = code[ip++];
+                    uint8_t high = code[ip++];
+                    if (verbose) printf("SET_TRAP %d\n", low | (high << 8));
+                    inst_count += 2;
                 } else {
-                    if (verbose) printf("%s -> Inst %d (Byte %zu) [OUT OF BOUNDS ERROR]\n", jump_type, target_inst, target_byte);
-                    err_count++;
+                    if (verbose) printf("[ERROR] Truncated SET_TRAP target!\n");
+                    err_count++; break;
                 }
-                inst_count += 2;
-            } else {
-                if (verbose) printf("[ERROR] Truncated FAR jump target!\n");
-                err_count++;
-                break;
             }
-        } else if (b1 == 0x0E && b2 == 0x01) {
-            if (ip + 2 <= sz) {
-                uint8_t lib = code[ip++];
-                uint8_t func = code[ip++];
-                if (verbose) printf("FFI_CALL Lib 0x%02X Func 0x%02X\n", lib, func);
-                inst_count += 2;
-            } else {
-                if (verbose) printf("[ERROR] Truncated FFI_CALL parameters!\n");
-                err_count++;
-                break;
+            else if (b2 == 0x0C) { if (verbose) printf("CLEAR_TRAP\n"); inst_count++; }
+            else if (b2 >= 0x10 && b2 <= 0x4F) { if (verbose) printf("JMP %d\n", b2 - 0x10); inst_count++; }
+            else if (b2 >= 0x50 && b2 <= 0x8F) { if (verbose) printf("JZ %d\n", b2 - 0x50); inst_count++; }
+            else if (b2 >= 0x90 && b2 <= 0xCF) { if (verbose) printf("JNZ %d\n", b2 - 0x90); inst_count++; }
+            else if (b2 >= 0xD0 && b2 <= 0xFB) { if (verbose) printf("CALL %d\n", b2 - 0xD0); inst_count++; }
+            else if (b2 >= 0xFC && b2 <= 0xFF) {
+                if (ip + 2 <= sz) {
+                    uint8_t low = code[ip++];
+                    uint8_t high = code[ip++];
+                    uint16_t target_inst = low | (high << 8);
+                    size_t target_byte = target_inst * 2;
+                    const char *jump_type = (b2 == 0xFC) ? "JZ_FAR" : (b2 == 0xFD ? "JNZ_FAR" : (b2 == 0xFE ? "JMP_FAR" : "CALL_FAR"));
+                    if (target_byte <= sz) {
+                        if (verbose) printf("%s -> Inst %d (Byte %zu) [OK]\n", jump_type, target_inst, target_byte);
+                    } else {
+                        if (verbose) printf("%s -> Inst %d (Byte %zu) [OUT OF BOUNDS ERROR]\n", jump_type, target_inst, target_byte);
+                        err_count++;
+                    }
+                    inst_count += 2;
+                } else {
+                    if (verbose) printf("[ERROR] Truncated FAR jump target!\n");
+                    err_count++; break;
+                }
             }
-        } else if (b1 == 0x05 && b2 == 0xFF) {
-            if (verbose) printf("HALT\n");
-            has_halt = true;
+            else { if (verbose) printf("OP %02X %02X\n", b1, b2); inst_count++; }
+        } else if (b1 == 0x05) {
+            if (b2 == 0x01) { if (verbose) printf("PRINT_NUM\n"); inst_count++; }
+            else if (b2 == 0x02) { if (verbose) printf("PRINT_CHAR\n"); inst_count++; }
+            else if (b2 == 0x03) {
+                if (verbose) printf("PRINT_STR \"");
+                while (ip < sz && code[ip] != 0) {
+                    if (verbose) putchar(code[ip]);
+                    ip++;
+                }
+                if (verbose) printf("\"\n");
+                if (ip < sz && code[ip] == 0) ip++;
+                if (ip % 2 != 0) ip++;
+                inst_count = ip / 2;
+            }
+            else if (b2 == 0x04) { if (verbose) printf("PRINT_NL\n"); inst_count++; }
+            else if (b2 == 0x05) { if (verbose) printf("SCAN_NUM\n"); inst_count++; }
+            else if (b2 == 0x06) { if (verbose) printf("SCAN_CHAR\n"); inst_count++; }
+            else if (b2 == 0xFF) { if (verbose) printf("HALT\n"); has_halt = true; inst_count++; }
+            else { if (verbose) printf("OP %02X %02X\n", b1, b2); inst_count++; }
+        } else if (b1 == 0x06) {
+            if (b2 == 0x01) { if (verbose) printf("SYS_TIME\n"); inst_count++; }
+            else if (b2 == 0x02) { if (verbose) printf("SYS_RAND\n"); inst_count++; }
+            else if (b2 == 0x03) { if (verbose) printf("SYS_CLOCK\n"); inst_count++; }
+            else { if (verbose) printf("OP %02X %02X\n", b1, b2); inst_count++; }
+        } else if (b1 == 0x07) {
+            if (b2 >= 0x10 && b2 <= 0x1F) { if (verbose) printf("MACRO_PRINT_REG R%d\n", b2 - 0x10); inst_count++; }
+            else if (b2 >= 0x30 && b2 <= 0x3F) { if (verbose) printf("MACRO_PRINT_REG_RAW R%d\n", b2 - 0x30); inst_count++; }
+            else if (b2 >= 0x40 && b2 <= 0x4F) { if (verbose) printf("MACRO_CLEAR_REG R%d\n", b2 - 0x40); inst_count++; }
+            else if (b2 >= 0x70 && b2 <= 0x7F) { if (verbose) printf("DEF_MACRO %d\n", b2 - 0x70); inst_count++; }
+            else if (b2 >= 0x80 && b2 <= 0x8F) { if (verbose) printf("EXEC_MACRO %d\n", b2 - 0x80); inst_count++; }
+            else { if (verbose) printf("OP %02X %02X\n", b1, b2); inst_count++; }
+        } else if (b1 == 0x08) {
+            if (b2 == 0x01) { if (verbose) printf("VEC_DOT_4D\n"); inst_count++; }
+            else if (b2 == 0x02) { if (verbose) printf("VEC_ADD_4D\n"); inst_count++; }
+            else if (b2 == 0x03) { if (verbose) printf("VEC_SCALE_4D\n"); inst_count++; }
+            else { if (verbose) printf("OP %02X %02X\n", b1, b2); inst_count++; }
+        } else if (b1 == 0x09) {
+            if (verbose) { printf("JMP_REL_BACK %d\n", b2); }
+            inst_count++;
+        } else if (b1 == 0x0A) {
+            if (b2 == 0x01) { if (verbose) printf("FADD\n"); inst_count++; }
+            else if (b2 == 0x02) { if (verbose) printf("FSUB\n"); inst_count++; }
+            else if (b2 == 0x03) { if (verbose) printf("FMUL\n"); inst_count++; }
+            else if (b2 == 0x04) { if (verbose) printf("FDIV\n"); inst_count++; }
+            else if (b2 == 0x05) { if (verbose) printf("I2F\n"); inst_count++; }
+            else if (b2 == 0x06) { if (verbose) printf("F2I\n"); inst_count++; }
+            else if (b2 == 0x07) { if (verbose) printf("PRINT_FLOAT\n"); inst_count++; }
+            else if (b2 == 0x08) { if (verbose) printf("FSQRT\n"); inst_count++; }
+            else if (b2 == 0x09) { if (verbose) printf("FABS\n"); inst_count++; }
+            else if (b2 == 0x0A) { if (verbose) printf("FEQ\n"); inst_count++; }
+            else { if (verbose) printf("OP %02X %02X\n", b1, b2); inst_count++; }
+        } else if (b1 == 0x0B) {
+            if (verbose) { printf("JMP_REL_FWD %d\n", b2); }
+            inst_count++;
+        } else if (b1 == 0x0C) {
+            if (b2 == 0x01) { if (verbose) printf("JZ_REL_BACK\n"); inst_count++; }
+            else if (b2 == 0x02) { if (verbose) printf("JNZ_REL_BACK\n"); inst_count++; }
+            else if (b2 == 0x03) { if (verbose) printf("JZ_REL_FWD\n"); inst_count++; }
+            else if (b2 == 0x04) { if (verbose) printf("JNZ_REL_FWD\n"); inst_count++; }
+            else { if (verbose) printf("OP %02X %02X\n", b1, b2); inst_count++; }
+        } else if (b1 == 0x0D) {
+            if (verbose) { printf("JZ_REL_FWD %d\n", b2); }
+            inst_count++;
+        } else if (b1 == 0x0E) {
+            if (b2 == 0x01) {
+                if (ip + 2 <= sz) {
+                    uint8_t lib = code[ip++];
+                    uint8_t func = code[ip++];
+                    if (verbose) printf("FFI_CALL Lib 0x%02X Func 0x%02X\n", lib, func);
+                    inst_count += 2;
+                } else {
+                    if (verbose) printf("[ERROR] Truncated FFI_CALL parameters!\n");
+                    err_count++; break;
+                }
+            } else { if (verbose) printf("OP %02X %02X\n", b1, b2); inst_count++; }
+        } else if (b1 == 0x0F) {
+            if (verbose) { printf("JNZ_REL_FWD %d\n", b2); }
             inst_count++;
         } else {
             if (verbose) printf("OP %02X %02X\n", b1, b2);
