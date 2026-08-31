@@ -9,6 +9,29 @@
 
 ---
 
+## ⚡ Quick Start
+
+```bash
+# 1. Clone & Build
+git clone https://github.com/dotdok132/LVLang
+cd LVLang
+gcc -O3 -Wall lvlc.c -o lvlc -lSDL2 -lm
+
+# 2. Run Hello World ("Hi!" + Newline)
+./lvlc "05x03 48x69 21x00 05x04 05xFF"
+```
+
+## 🏗️ Architecture
+
+```mermaid
+graph LR
+    A[AI Agent / LLM] -->|Direct Hex Bytecode| B[lvlc VM C99 Runtime]
+    B -->|Fast Parsing & Execution| C(Memory & Registers)
+    B -->|Zero Overhead| D[stdout / Hardware]
+```
+
+---
+
 ## 🌐 Official Ecosystem Repositories
 
 - ⚡ **Core Engine & VM Runtime**: [dotdok132/LVLang](https://github.com/dotdok132/LVLang)
@@ -54,6 +77,127 @@ Every instruction occupies **strictly 2 bytes**: `[Group: 1 Byte] [Command/Opera
 ### 1. Stack, Registers & Memory (`Group 0x01`)
 | Opcode | Operand | Name | Description |
 |---|---|---|---|
+| `0x01` | `0x00..0x7F` | `PUSH_IMM` | Push 7-bit integer $0..127$ onto data stack |
+| `0x01` | `0x01` | `POP` | Pop top of data stack |
+| `0x01` | `0x02` | `DUP` | Duplicate top element of stack |
+| `0x01` | `0x03` | `SWAP` | Swap top two elements of stack |
+| `0x01` | `0x04` | `PUSH_SHIFT_8` | Pop $a$, push $a \ll 8$ |
+| `0x01` | `0x05` | `PUSH_SHIFT_16` | Pop $a$, push $a \ll 16$ |
+| `0x01` | `0x10 + R` | `LOAD_REG` | Load register $R_0..R_{15}$ onto stack |
+| `0x01` | `0x30 + R` | `STORE_REG` | Store stack top into register $R_0..R_{15}$ |
+| `0x01` | `0x40 + R` | `LOAD_RAM` | Push `RAM[R_idx]` onto stack |
+| `0x01` | `0x50 + R` | `STORE_RAM` | Pop stack top into `RAM[R_idx]` |
+| `0x01` | `0x60` | `MALLOC` | Pop size, push chunk_id (Dynamic Heap Allocation) |
+| `0x01` | `0x61` | `FREE` | Pop chunk_id (Dynamic Heap Free) |
+| `0x01` | `0x62` | `LOAD_HEAP` | Pop offset, pop chunk_id, push `heap[chunk_id][offset]` |
+| `0x01` | `0x63` | `STORE_HEAP` | Pop val, pop offset, pop chunk_id, `heap[chunk_id][offset] = val` |
+
+### 2. Integer & Math (`Group 0x02`)
+| Opcode | Operand | Name | Description |
+|---|---|---|---|
+| `0x02` | `0x01` | `ADD` | Pop $b, a$; push $a + b$ |
+| `0x02` | `0x02` | `SUB` | Pop $b, a$; push $a - b$ |
+| `0x02` | `0x03` | `MUL` | Pop $b, a$; push $a \times b$ |
+| `0x02` | `0x04` | `DIV` | Pop $b, a$; push $a / b$ |
+| `0x02` | `0x05` | `MOD` | Pop $b, a$; push $a \pmod b$ |
+| `0x02` | `0x10 + R` | `INC_REG` | Increment register $R_i \leftarrow R_i + 1$ |
+| `0x02` | `0x20 + R` | `DEC_REG` | Decrement register $R_i \leftarrow R_i - 1$ |
+
+### 3. Comparison & Logic (`Group 0x03`)
+| Opcode | Operand | Name | Description |
+|---|---|---|---|
+| `0x03` | `0x01` | `EQ` | Push $1$ if $a == b$ else $0$ |
+| `0x03` | `0x02` | `NEQ` | Push $1$ if $a \neq b$ else $0$ |
+| `0x03` | `0x03` | `GT` | Push $1$ if $a > b$ else $0$ |
+| `0x03` | `0x04` | `LT` | Push $1$ if $a < b$ else $0$ |
+| `0x03` | `0x05` | `GTE` | Push $1$ if $a \ge b$ else $0$ |
+| `0x03` | `0x06` | `LTE` | Push $1$ if $a \le b$ else $0$ |
+| `0x03` | `0x07` | `AND` | Push $1$ if $a \land b$ else $0$ |
+| `0x03` | `0x08` | `OR` | Push $1$ if $a \lor b$ else $0$ |
+| `0x03` | `0x09` | `NOT` | Push $1$ if $\neg a$ else $0$ |
+
+### 4. Flow Control, Traps & Routine (`Group 0x04`)
+| Opcode | Operand | Name | Description |
+|---|---|---|---|
+| `0x04` | `0x00` | `RET` | Return from subroutine |
+| `0x04` | `0x01` | `YIELD` | Async coroutine pause |
+| `0x04` | `0x05` | `SET_TRAP` | Set Exception Catch Handler |
+| `0x04` | `0x06` | `CLEAR_TRAP` | Disable Exception Handler |
+| `0x04` | `0x10..0x4F` | `JMP` | Jump absolute Target `(Op-0x10)*2` |
+| `0x04` | `0x50..0x8F` | `JZ` | Jump absolute Target if 0 |
+| `0x04` | `0x90..0xCF` | `JNZ` | Jump absolute Target if != 0 |
+| `0x04` | `0xD0..0xFB` | `CALL` | Call subroutine |
+| `0x04` | `0xFC` | `JZ_FAR` | Jump 16-bit Target if 0 |
+| `0x04` | `0xFD` | `JNZ_FAR` | Jump 16-bit Target if != 0 |
+| `0x04` | `0xFE` | `JMP_FAR` | Jump 16-bit Target |
+| `0x04` | `0xFF` | `CALL_FAR` | Call 16-bit Target subroutine |
+
+### 5. System & IO (`Group 0x05`)
+| Opcode | Operand | Name | Description |
+|---|---|---|---|
+| `0x05` | `0x01` | `PRINT_NUM` | Print Integer |
+| `0x05` | `0x02` | `PRINT_CHAR` | Print Char |
+| `0x05` | `0x03` | `PRINT_STR` | Print Inline String |
+| `0x05` | `0x04` | `PRINT_NL` | Print Newline |
+| `0x05` | `0x05` | `SCAN_NUM` | Read Integer from Input |
+| `0x05` | `0x06` | `SCAN_CHAR` | Read Char from Input |
+| `0x05` | `0xFF` | `HALT` | Stop execution |
+
+### 6. System Syscalls & Environment (`Group 0x06`)
+| Opcode | Operand | Name | Description |
+|---|---|---|---|
+| `0x06` | `0x01` | `SYS_TIME` | Push Unix timestamp in seconds |
+| `0x06` | `0x02` | `SYS_RAND` | Push pseudo-random 15-bit integer |
+| `0x06` | `0x03` | `SYS_CLOCK` | Push process clock in milliseconds |
+
+### 7. Float Math (`Group 0x0A`)
+| Opcode | Operand | Name | Description |
+|---|---|---|---|
+| `0x0A` | `0x01` | `FADD` | Pop $b, a$ (floats); push $a + b$ |
+| `0x0A` | `0x02` | `FSUB` | Pop $b, a$ (floats); push $a - b$ |
+| `0x0A` | `0x03` | `FMUL` | Pop $b, a$ (floats); push $a \times b$ |
+| `0x0A` | `0x04` | `FDIV` | Pop $b, a$ (floats); push $a / b$ |
+| `0x0A` | `0x05` | `I2F` | Pop int $a$, push float $a$ |
+| `0x0A` | `0x06` | `F2I` | Pop float $a$, push int $a$ |
+| `0x0A` | `0x07` | `PRINT_FLOAT` | Pop float $a$, print float to stdout |
+| `0x0A` | `0x08` | `FSQRT` | Pop float $a$; push $\sqrt{a}$ |
+| `0x0A` | `0x09` | `FABS` | Pop float $a$; push $|a|$ |
+| `0x0A` | `0x0A` | `FEQ` | Pop $b, a$ (floats); push 1 if $a == b$ else 0 |
+
+### 8. Direct Relative Flow Control (`Group 0x09`, `0x0B`, `0x0C`, `0x0D`, `0x0F`)
+| Opcode | Operand | Name | Description |
+|---|---|---|---|
+| `0x09` | `N` | `JMP_REL_BACK` | Jump **backward** $N$ instructions ($1..255$) |
+| `0x0B` | `N` | `JMP_REL_FWD` | Jump **forward** $N$ instructions ($1..255$) |
+| `0x0C` | `0x01` | `JZ_REL_BACK` | Pop $N$, pop $a$; jump **backward** $N$ instructions if $a == 0$ |
+| `0x0C` | `0x02` | `JNZ_REL_BACK`| Pop $N$, pop $a$; jump **backward** $N$ instructions if $a \neq 0$ |
+| `0x0C` | `0x03` | `JZ_REL_FWD`  | Pop $N$, pop $a$; jump **forward** $N$ instructions if $a == 0$ |
+| `0x0C` | `0x04` | `JNZ_REL_FWD` | Pop $N$, pop $a$; jump **forward** $N$ instructions if $a \neq 0$ |
+| `0x0D` | `N` | `JZ_REL_FWD` | Pop $a$; jump **forward** $N$ instructions if $a == 0$ |
+| `0x0F` | `N` | `JNZ_REL_FWD` | Pop $a$; jump **forward** $N$ instructions if $a \neq 0$ |
+
+### 9. Dynamic AI Macros (`Group 0x07`)
+| Opcode | Operand | Name | Description |
+|---|---|---|---|
+| `0x07` | `0x70 + ID` | `DEF_MACRO` | Register dynamic subroutine `ID` ($0..15$) |
+| `0x07` | `0x80 + ID` | `EXEC_MACRO` | Execute dynamic subroutine `ID` ($0..15$) in 1 instruction |
+| `0x07` | `0x10 + R` | `MACRO_PRINT_REG` | Print register $R_i$ with newline |
+| `0x07` | `0x30 + R` | `MACRO_PRINT_REG_RAW` | Print register $R_i$ without newline |
+| `0x07` | `0x40 + R` | `MACRO_CLEAR_REG` | Zero out register $R_i \leftarrow 0$ |
+
+### 10. Vector Math & Embeddings (`Group 0x08`)
+| Opcode | Operand | Name | Description |
+|---|---|---|---|
+| `0x08` | `0x01` | `VEC_DOT_4D` | Dot product of `(R0..R3)` & `(R4..R7)` -> Push to stack |
+| `0x08` | `0x02` | `VEC_ADD_4D` | `(R0..R3) += (R4..R7)` |
+| `0x08` | `0x03` | `VEC_SCALE_4D` | `(R0..R3) *=` Stack Top |
+
+### 11. Hardware Plugins & FFI (`Group 0x0E`)
+| Opcode | Operand | Name | Description |
+|---|---|---|---|
+| `0x0E` | `0x01 [LibID] [FuncID]` | `FFI_CALL` | Call C FFI Plugin (0x06=SDL2, 0x07=Time, 0x08=String) |
+
+---|---|---|---|
 | `0x01` | `0x00..0x7F` | `PUSH_IMM` | Push 7-bit integer $0..127$ onto data stack |
 | `0x01` | `0x01` | `POP` | Pop top of data stack |
 | `0x01` | `0x02` | `DUP` | Duplicate top element of stack |
