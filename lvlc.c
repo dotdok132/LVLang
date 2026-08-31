@@ -322,7 +322,9 @@ static int validate_bytecode(const uint8_t *code, size_t sz, bool verbose) {
         printf("[VALIDATION WARNING] Bytecode does not contain explicit HALT (05 FF) instruction.\n");
     }
 
-    printf("[VALIDATION SUCCESS] Bytecode (%zu bytes, %zu instructions) is 100%% valid and aligned!\n", sz, inst_count);
+    if (verbose) {
+        printf("[VALIDATION SUCCESS] Bytecode (%zu bytes, %zu instructions) is 100%% valid and aligned!\n", sz, inst_count);
+    }
     return 1;
 }
 
@@ -341,6 +343,7 @@ int main(int argc, char **argv) {
 
     bool validate_only = false;
     bool trace_execution = false;
+    bool json_mode = false;
     int arg_idx = 1;
     if (strcmp(argv[1], "--validate") == 0 || strcmp(argv[1], "--disasm") == 0) {
         validate_only = true;
@@ -354,6 +357,13 @@ int main(int argc, char **argv) {
         arg_idx = 2;
         if (argc < 3) {
             printf("Usage: %s --trace \"<hex stream>\"\n", argv[0]);
+            return 1;
+        }
+    } else if (strcmp(argv[1], "--json") == 0) {
+        json_mode = true;
+        arg_idx = 2;
+        if (argc < 3) {
+            printf("{\"status\":\"error\",\"error\":\"MISSING_ARGUMENT\"}\n");
             return 1;
         }
     }
@@ -371,18 +381,25 @@ int main(int argc, char **argv) {
         if (fsize > (long)sizeof(bytecode)) fsize = sizeof(bytecode);
         bytecode_size = fread(bytecode, 1, fsize, f);
         fclose(f);
-        printf("[+] Loaded %zu bytes from binary file: %s\n", bytecode_size, target);
+        if (!json_mode) printf("[+] Loaded %zu bytes from binary file: %s\n", bytecode_size, target);
     } else {
         bytecode_size = parse_hex_stream(target, bytecode, sizeof(bytecode));
         if (bytecode_size == 0) {
-            fprintf(stderr, "Error: Unable to parse hex stream or open file '%s'\n", target);
+            if (json_mode) {
+                printf("{\"status\":\"error\",\"error\":\"PARSE_ERROR\",\"target\":\"%s\"}\n", target);
+            } else {
+                fprintf(stderr, "Error: Unable to parse hex stream or open file '%s'\n", target);
+            }
             return 1;
         }
-        printf("[+] Loaded %zu bytes directly from hex stream\n", bytecode_size);
+        if (!json_mode) printf("[+] Loaded %zu bytes directly from hex stream\n", bytecode_size);
     }
 
-    int valid = validate_bytecode(bytecode, bytecode_size, true);
+    int valid = validate_bytecode(bytecode, bytecode_size, !json_mode);
     if (!valid) {
+        if (json_mode) {
+            printf("{\"status\":\"error\",\"error\":\"INVALID_BYTECODE\",\"bytes\":%zu}\n", bytecode_size);
+        }
         return 1;
     }
 
@@ -390,8 +407,10 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    printf("\n=== Executing in LVLang VM Runtime ===\nOutput: ");
-    fflush(stdout);
+    if (!json_mode) {
+        printf("\n=== Executing in LVLang VM Runtime ===\nOutput: ");
+        fflush(stdout);
+    }
 
     lvl_vm_t vm;
     lvl_init(&vm, bytecode, bytecode_size);
@@ -424,6 +443,12 @@ int main(int argc, char **argv) {
         lvl_run(&vm);
     }
 
-    printf("\n[VM Halted] Exit Status: %d (IP: %zu)\n", lvl_get_status(&vm), vm.ip);
+    if (json_mode) {
+        printf("{\"status\":\"%s\",\"exit_status\":%d,\"ip\":%zu,\"bytes\":%zu,\"stack_depth\":%zu}\n",
+               vm.status >= 0 ? "success" : "error",
+               lvl_get_status(&vm), vm.ip, bytecode_size, vm.sp);
+    } else {
+        printf("\n[VM Halted] Exit Status: %d (IP: %zu)\n", lvl_get_status(&vm), vm.ip);
+    }
     return 0;
 }
