@@ -41,6 +41,8 @@ graph LR
 - 🕒 **Time & Delays Plugin**: [dotdok132/lvlang-time](https://github.com/dotdok132/lvlang-time) (`LibID 0x07` — High-Precision Timestamps, Delays, Date Parsing)
 - 🔤 **String & Text Plugin**: [dotdok132/lvlang-string](https://github.com/dotdok132/lvlang-string) (`LibID 0x08` — String Manipulation, Case Conversion, int<->string Parsing)
 - 🔐 **Cryptography Plugin**: [dotdok132/lvlang-crypto](https://github.com/dotdok132/lvlang-crypto) (`LibID 0x02` — SHA256 & AES)
+- 🐍 **Python SDK Binding**: [dotdok132/lvlang-python](https://github.com/dotdok132/lvlang-python) (Native Python SDK for AI agents & Py applications)
+- 🟢 **JavaScript / Node.js SDK**: [dotdok132/lvlang-js](https://github.com/dotdok132/lvlang-js) (Node.js & Web JS SDK for web apps)
 
 ---
 
