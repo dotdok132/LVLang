@@ -9,6 +9,24 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <math.h>
+
+typedef union {
+    int32_t i;
+    float f;
+} lvl_float_conv_t;
+
+static inline float lvl_bits_to_float(int32_t bits) {
+    lvl_float_conv_t u;
+    u.i = bits;
+    return u.f;
+}
+
+static inline int32_t lvl_float_to_bits(float val) {
+    lvl_float_conv_t u;
+    u.f = val;
+    return u.i;
+}
 
 #ifdef __cplusplus
 extern "C" {
@@ -708,40 +726,98 @@ int lvl_step(lvl_vm_t *vm) {
             break;
         }
 
-        /* MODULE 0x0A: STRING & PATTERN PROCESSING */
+        /* MODULE 0x0A: IEEE-754 32-BIT FLOAT MATH & ARITHMETIC */
         case 0x0A:
             switch (b2) {
-                case 0x01: {
-                    /* STR_CMP R1, R2: Compare strings starting at RAM[R0] and RAM[R1] */
-                    uint8_t r1 = vm->registers[0] % LVL_RAM_SIZE;
-                    uint8_t r2 = vm->registers[1] % LVL_RAM_SIZE;
-                    int res = 0;
-                    size_t idx = 0;
-                    while (idx < 256) {
-                        char c1 = (char)vm->ram[(r1 + idx) % LVL_RAM_SIZE];
-                        char c2 = (char)vm->ram[(r2 + idx) % LVL_RAM_SIZE];
-                        if (c1 != c2) { res = (c1 < c2) ? -1 : 1; break; }
-                        if (c1 == '\0') break;
-                        idx++;
+                case 0x01: { /* FADD: Pop b, a (floats); push a + b */
+                    if (lvl_pop(vm, &b) && lvl_pop(vm, &a)) {
+                        float fa = lvl_bits_to_float(a);
+                        float fb = lvl_bits_to_float(b);
+                        lvl_push(vm, lvl_float_to_bits(fa + fb));
                     }
-                    lvl_push(vm, res);
                     break;
                 }
-                case 0x02: {
-                    /* STR_FIND: Substring search in RAM[R0] for pattern in RAM[R1] */
-                    uint8_t r_hay = vm->registers[0] % LVL_RAM_SIZE;
-                    uint8_t r_ndl = vm->registers[1] % LVL_RAM_SIZE;
-                    char haystack[256] = {0}, needle[256] = {0};
-                    for (size_t i = 0; i < 255; i++) {
-                        haystack[i] = (char)vm->ram[(r_hay + i) % LVL_RAM_SIZE];
-                        if (haystack[i] == '\0') break;
+                case 0x02: { /* FSUB: Pop b, a (floats); push a - b */
+                    if (lvl_pop(vm, &b) && lvl_pop(vm, &a)) {
+                        float fa = lvl_bits_to_float(a);
+                        float fb = lvl_bits_to_float(b);
+                        lvl_push(vm, lvl_float_to_bits(fa - fb));
                     }
-                    for (size_t i = 0; i < 255; i++) {
-                        needle[i] = (char)vm->ram[(r_ndl + i) % LVL_RAM_SIZE];
-                        if (needle[i] == '\0') break;
+                    break;
+                }
+                case 0x03: { /* FMUL: Pop b, a (floats); push a * b */
+                    if (lvl_pop(vm, &b) && lvl_pop(vm, &a)) {
+                        float fa = lvl_bits_to_float(a);
+                        float fb = lvl_bits_to_float(b);
+                        lvl_push(vm, lvl_float_to_bits(fa * fb));
                     }
-                    char *found = strstr(haystack, needle);
-                    lvl_push(vm, found ? (int32_t)(found - haystack) : -1);
+                    break;
+                }
+                case 0x04: { /* FDIV: Pop b, a (floats); push a / b */
+                    if (lvl_pop(vm, &b) && lvl_pop(vm, &a)) {
+                        float fa = lvl_bits_to_float(a);
+                        float fb = lvl_bits_to_float(b);
+                        if (fb != 0.0f) lvl_push(vm, lvl_float_to_bits(fa / fb));
+                        else vm->status = LVL_ERR_DIVISION_BY_ZERO;
+                    }
+                    break;
+                }
+                case 0x05: { /* I2F: Pop integer a; convert to float and push */
+                    if (lvl_pop(vm, &a)) {
+                        lvl_push(vm, lvl_float_to_bits((float)a));
+                    }
+                    break;
+                }
+                case 0x06: { /* F2I: Pop float a; convert to integer and push */
+                    if (lvl_pop(vm, &a)) {
+                        float fa = lvl_bits_to_float(a);
+                        lvl_push(vm, (int32_t)fa);
+                    }
+                    break;
+                }
+                case 0x07: { /* PRINT_FLOAT: Pop float a; print float to stdout */
+                    if (lvl_pop(vm, &a)) {
+                        float fa = lvl_bits_to_float(a);
+                        printf("%f", fa);
+                    }
+                    break;
+                }
+                case 0x08: { /* FSQRT: Pop float a; push sqrt(a) */
+                    if (lvl_pop(vm, &a)) {
+                        float fa = lvl_bits_to_float(a);
+                        lvl_push(vm, lvl_float_to_bits(sqrtf(fa)));
+                    }
+                    break;
+                }
+                case 0x09: { /* FABS: Pop float a; push fabsf(a) */
+                    if (lvl_pop(vm, &a)) {
+                        float fa = lvl_bits_to_float(a);
+                        lvl_push(vm, lvl_float_to_bits(fabsf(fa)));
+                    }
+                    break;
+                }
+                case 0x0A: { /* FEQ: Pop b, a (floats); push 1 if a == b else 0 */
+                    if (lvl_pop(vm, &b) && lvl_pop(vm, &a)) {
+                        float fa = lvl_bits_to_float(a);
+                        float fb = lvl_bits_to_float(b);
+                        lvl_push(vm, (fa == fb) ? 1 : 0);
+                    }
+                    break;
+                }
+                case 0x0B: { /* FGT: Pop b, a (floats); push 1 if a > b else 0 */
+                    if (lvl_pop(vm, &b) && lvl_pop(vm, &a)) {
+                        float fa = lvl_bits_to_float(a);
+                        float fb = lvl_bits_to_float(b);
+                        lvl_push(vm, (fa > fb) ? 1 : 0);
+                    }
+                    break;
+                }
+                case 0x0C: { /* FLT: Pop b, a (floats); push 1 if a < b else 0 */
+                    if (lvl_pop(vm, &b) && lvl_pop(vm, &a)) {
+                        float fa = lvl_bits_to_float(a);
+                        float fb = lvl_bits_to_float(b);
+                        lvl_push(vm, (fa < fb) ? 1 : 0);
+                    }
                     break;
                 }
                 default:

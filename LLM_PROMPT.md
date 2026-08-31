@@ -24,14 +24,24 @@ You are an expert compiler agent for **LVLang** — a zero-overhead, 2-byte alig
 - `01 40+R` : `LOAD_RAM R` — **RAM Array Access**: Push value of `RAM[R_idx]` ($0..1023$) onto stack.
 - `01 50+R` : `STORE_RAM R` — **RAM Array Store**: Pop value and store into `RAM[R_idx]` ($0..1023$).
 
-### 2. Integer Math (`Group 0x02`)
-- `02 01`   : `ADD` — Pop $b, a$; push $a + b$.
-- `02 02`   : `SUB` — Pop $b, a$; push $a - b$.
-- `02 03`   : `MUL` — Pop $b, a$; push $a \times b$.
-- `02 04`   : `DIV` — Pop $b, a$; push $a / b$.
-- `02 05`   : `MOD` — Pop $b, a$; push $a \pmod b$.
-- `02 10+R` : `INC R` — Direct increment register $R$.
-- `02 20+R` : `DEC R` — Direct decrement register $R$.
+### 2. Integer & Float Math (`Group 0x02`, `Group 0x0A`)
+- `02 01`   : `ADD` — Pop $b, a$; push $a + b$ (integer).
+- `02 02`   : `SUB` — Pop $b, a$; push $a - b$ (integer).
+- `02 03`   : `MUL` — Pop $b, a$; push $a \times b$ (integer).
+- `02 04`   : `DIV` — Pop $b, a$; push $a / b$ (integer).
+- `02 05`   : `MOD` — Pop $b, a$; push $a \pmod b$ (integer).
+- `0A 01`   : `FADD` — Pop $b, a$ (floats); push $a + b$ (float).
+- `0A 02`   : `FSUB` — Pop $b, a$ (floats); push $a - b$ (float).
+- `0A 03`   : `FMUL` — Pop $b, a$ (floats); push $a \times b$ (float).
+- `0A 04`   : `FDIV` — Pop $b, a$ (floats); push $a / b$ (float).
+- `0A 05`   : `I2F`  — Pop int32 $a$; convert to float and push.
+- `0A 06`   : `F2I`  — Pop float $a$; convert to integer and push.
+- `0A 07`   : `PRINT_FLOAT` — Pop float $a$; print float to stdout.
+- `0A 08`   : `FSQRT` — Pop float $a$; push $\sqrt{a}$.
+- `0A 09`   : `FABS`  — Pop float $a$; push $|a|$.
+- `0A 0A`   : `FEQ`   — Pop $b, a$ (floats); push 1 if $a == b$ else 0.
+- `0A 0B`   : `FGT`   — Pop $b, a$ (floats); push 1 if $a > b$ else 0.
+- `0A 0C`   : `FLT`   — Pop $b, a$ (floats); push 1 if $a < b$ else 0.
 
 ### 3. Comparisons (`Group 0x03`)
 - `03 01`   : `EQ` — Pop $b, a$; push $1$ if $a == b$ else $0$.
