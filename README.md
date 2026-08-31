@@ -15,6 +15,8 @@
 - 🖥️ **System OS Plugin**: [dotdok132/lvlang-system](https://github.com/dotdok132/lvlang-system) (`LibID 0x03` — Shell Commands, File I/O, Env Vars)
 - ⌨️ **Keyboard Plugin**: [dotdok132/lvlang-keyboard](https://github.com/dotdok132/lvlang-keyboard) (`LibID 0x05` — Terminal Raw Input, Non-blocking Polling)
 - 🎮 **SDL2 2D Engine Plugin**: [dotdok132/lvlang-sdl2](https://github.com/dotdok132/lvlang-sdl2) (`LibID 0x06` — 2D Windowing, Hardware Acceleration, Double Buffering)
+- 🕒 **Time & Delays Plugin**: [dotdok132/lvlang-time](https://github.com/dotdok132/lvlang-time) (`LibID 0x07` — High-Precision Timestamps, Delays, Date Parsing)
+- 🔤 **String & Text Plugin**: [dotdok132/lvlang-string](https://github.com/dotdok132/lvlang-string) (`LibID 0x08` — String Manipulation, Case Conversion, int<->string Parsing)
 - 🔐 **Cryptography Plugin**: [dotdok132/lvlang-crypto](https://github.com/dotdok132/lvlang-crypto) (`LibID 0x02` — SHA256 & AES)
 
 ---
@@ -30,6 +32,8 @@ Standard programming languages (C++, Python, JS) force LLMs to spend **over 90% 
 - **Direct 1:1 Instruction Count Relative Jumps**:
   - `09xN`: Jump **backward** $N$ instructions ($1..255$).
   - `0BxN`: Jump **forward** $N$ instructions ($1..255$).
+  - `0DxN`: Jump **forward** $N$ instructions if stack top $== 0$.
+  - `0FxN`: Jump **forward** $N$ instructions if stack top $\neq 0$.
 - **Zero Parsing Overhead**: The C runtime directly executes the byte stream in memory without AST building or text tokenizers.
 
 ---
@@ -80,13 +84,13 @@ Every instruction occupies **strictly 2 bytes**: `[Group: 1 Byte] [Command/Opera
 | `0x03` | `0x03` | `GT` | Push $1$ if $a > b$ else $0$ |
 | `0x03` | `0x04` | `LT` | Push $1$ if $a < b$ else $0$ |
 
-### 4. Direct Relative Flow Control (`Group 0x09` & `Group 0x0B`)
+### 4. Direct Relative Flow Control (`Group 0x09`, `0x0B`, `0x0D`, `0x0F`)
 | Opcode | Operand | Name | Description |
 |---|---|---|---|
 | `0x09` | `N` | `JMP_REL_BACK` | Jump **backward** $N$ instructions ($1..255$) |
 | `0x0B` | `N` | `JMP_REL_FWD` | Jump **forward** $N$ instructions ($1..255$) |
-| `0x0C` | `0x01` | `JZ_REL_BACK` | Pop $N$, Pop $a$; jump **backward** $N$ instructions if $a == 0$ |
-| `0x0C` | `0x02` | `JNZ_REL_BACK` | Pop $N$, Pop $a$; jump **backward** $N$ instructions if $a \neq 0$ |
+| `0x0D` | `N` | `JZ_REL_FWD` | Pop $a$; jump **forward** $N$ instructions if $a == 0$ |
+| `0x0F` | `N` | `JNZ_REL_FWD` | Pop $a$; jump **forward** $N$ instructions if $a \neq 0$ |
 
 ### 5. Dynamic AI Macros (`Group 0x07`)
 | Opcode | Operand | Name | Description |
@@ -98,7 +102,7 @@ Every instruction occupies **strictly 2 bytes**: `[Group: 1 Byte] [Command/Opera
 ### 6. Hardware Plugins & FFI (`Group 0x0E`)
 | Opcode | Operand | Name | Description |
 |---|---|---|---|
-| `0x0E` | `0x01 [LibID] [FuncID]` | `FFI_CALL` | Call C FFI Plugin (0x06=SDL2, 0x03=System, 0x05=Keyboard) |
+| `0x0E` | `0x01 [LibID] [FuncID]` | `FFI_CALL` | Call C FFI Plugin (0x06=SDL2, 0x07=Time, 0x08=String) |
 
 ---
 
@@ -114,8 +118,8 @@ gcc -O3 -Wall lvlc.c -o lvlc -lSDL2
 # Disassemble hex stream to human opcode trace
 ./lvlc --disasm "01x64 01x08 02x03 0Ex01 06x01 05xFF"
 
-# Run 60 FPS continuous SDL2 2D graphics loop
-./lvlc "07x70 01x12 01x30 02x03 01x10 02x01 01x33 01x11 01x2C 02x03 01x10 02x01 01x34 01x12 01x11 02x03 01x10 01x03 02x03 02x01 01x7F 02x05 01x2D 02x01 01x35 01x11 01x17 02x03 01x10 01x05 02x03 02x01 01x7F 02x05 01x2D 02x01 01x36 01x12 01x11 02x01 01x0B 02x03 01x10 01x07 02x03 02x01 01x7F 02x05 01x2D 02x01 01x37 01x15 01x16 01x17 0Ex01 06x02 01x13 01x14 01x26 01x22 0Ex01 06x04 04x00 01x64 01x08 02x03 01x64 01x06 02x03 0Ex01 06x01 01x01 07x40 02x10 01x0A 01x0F 01x1E 0Ex01 06x02 0Ex01 06x03 07x41 07x42 07x80 02x12 01x12 01x10 03x04 09x05 02x11 01x11 01x0C 03x04 09x0C 0Ex01 06x05 0Ex01 06x06 09x1C 0Ex01 06x07 05xFF"
+# Run Interactive Calculator (15 * 6 = 90)
+printf "15\n3\n6\n" | ./lvlc "05x03 43x61 6Cx6C 75x6C 61x74 6Fx72 0Ax4E 75x6D 31x3A 20x00 05x05 01x30 05x03 4Fx70 20x28 31x3D 2Bx2C 20x32 3Dx2D 2Cx20 33x3D 2Ax2C 20x34 3Dx2F 29x3A 20x00 05x05 01x31 05x03 4Ex75 6Dx32 3Ax20 20x00 05x05 01x32 01x11 01x81 03x01 0Dx05 01x10 01x12 02x01 01x33 0Bx16 01x11 01x82 03x01 0Dx05 01x10 01x12 02x02 01x33 0Bx10 01x11 01x83 03x01 0Dx05 01x10 01x12 02x03 01x33 0Bx0A 01x10 01x12 02x04 01x33 05x03 52x65 73x75 6Cx74 3Ax20 20x00 01x13 05x01 05x04 05xFF"
 ```
 
 ---
