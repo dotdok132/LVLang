@@ -67,6 +67,9 @@ static size_t parse_hex_stream(const char *str, uint8_t *out_buf, size_t max_siz
             p++;
         }
     }
+    if (count % 2 != 0 && count < max_size) {
+        out_buf[count++] = 0x00; /* Auto-align odd hex stream to 2-byte boundary for AI safety */
+    }
     return count;
 }
 
