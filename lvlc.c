@@ -109,151 +109,176 @@ typedef struct {
     size_t inst_idx;
 } lvl_label_t;
 
+/* Read a label name from *pp (already past '@'), advance *pp past the name */
+static size_t lvl_read_label(const char **pp, char *out, size_t maxlen) {
+    const char *start = *pp;
+    while (**pp && !isspace((unsigned char)**pp) && **pp != ',' && **pp != ':') (*pp)++;
+    size_t len = (size_t)(*pp - start);
+    if (len >= maxlen) len = maxlen - 1;
+    strncpy(out, start, len);
+    out[len] = '\0';
+    return len;
+}
+
 static size_t parse_hex_stream(const char *str, uint8_t *out_buf, size_t max_size) {
     lvl_label_t labels[128];
     size_t label_count = 0;
 
-    /* PASS 1: Symbol & Label Discovery */
+    /* ===== PASS 1: label discovery + instruction slot counting ===== */
     const char *p = str;
-    size_t cur_inst_slot = 0;
+    size_t slot = 0; /* instruction slot counter (1 slot = 2 bytes) */
 
     while (*p) {
+        /* skip whitespace + punctuation */
         while (*p && (isspace((unsigned char)*p) || *p == ',' || *p == '{' || *p == '}')) p++;
         if (!*p) break;
 
-        /* Label Definition: @name: */
+        /* @name: label definition */
         if (*p == '@') {
-            const char *start = p + 1;
-            while (*p && *p != ':' && !isspace((unsigned char)*p)) p++;
-            if (*p == ':') {
-                size_t len = (size_t)(p - start);
-                if (len < sizeof(labels[0].name) && label_count < 128) {
-                    strncpy(labels[label_count].name, start, len);
-                    labels[label_count].name[len] = '\0';
-                    labels[label_count].inst_idx = cur_inst_slot;
-                    label_count++;
-                }
-                p++; /* skip ':' */
-                continue;
+            p++; /* skip '@' */
+            char name[64];
+            size_t len = lvl_read_label(&p, name, sizeof(name));
+            if (*p == ':') p++; /* consume ':' */
+            if (len > 0 && label_count < 128) {
+                memcpy(labels[label_count].name, name, len + 1);
+                labels[label_count].inst_idx = slot;
+                label_count++;
             }
-        }
-
-        /* Check opcode token */
-        if (p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) p += 2;
-
-        /* Check for @label reference like 09@name, 0D@name, 0F@name */
-        if (isxdigit((unsigned char)p[0]) && isxdigit((unsigned char)p[1]) && p[2] == '@') {
-            cur_inst_slot += 1;
-            p += 3;
-            while (*p && !isspace((unsigned char)*p) && *p != ',') p++;
             continue;
         }
 
-        if (isxdigit((unsigned char)p[0]) && isxdigit((unsigned char)p[1])) {
-            uint8_t b1 = (uint8_t)strtoul((char[]){p[0], p[1], '\0'}, NULL, 16);
-            p += 2;
-            while (*p && (isspace((unsigned char)*p) || *p == 'x' || *p == 'X')) p++;
-            if (isxdigit((unsigned char)p[0]) && isxdigit((unsigned char)p[1])) {
-                uint8_t b2 = (uint8_t)strtoul((char[]){p[0], p[1], '\0'}, NULL, 16);
-                p += 2;
-                cur_inst_slot += 1;
+        /* strip 0x */
+        if (p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) p += 2;
+        if (!isxdigit((unsigned char)p[0])) { p++; continue; }
 
-                /* 4-byte instructions span 2 instruction slots */
-                if ((b1 == 0x0E && b2 == 0x01) || (b1 == 0x01 && b2 == 0x08)) {
-                    /* Read next 2 payload bytes */
-                    for (int k = 0; k < 2; k++) {
-                        while (*p && (isspace((unsigned char)*p) || *p == 'x' || *p == 'X')) p++;
-                        if (isxdigit((unsigned char)p[0]) && isxdigit((unsigned char)p[1])) {
-                            p += 2;
-                        }
-                    }
-                    cur_inst_slot += 1;
-                }
+        /* read b1 */
+        uint8_t b1 = (uint8_t)strtoul((char[]){p[0], isxdigit((unsigned char)p[1]) ? p[1] : '0', '\0'}, NULL, 16);
+        p += isxdigit((unsigned char)p[1]) ? 2 : 1;
+
+        /* skip x separator */
+        if (*p == 'x' || *p == 'X') p++;
+
+        /* peek past spaces: is next token @label? */
+        const char *q = p;
+        while (*q && *q != '\n' && isspace((unsigned char)*q)) q++;
+        if (*q == '@') {
+            /* label-ref instruction: NN @label => 1 slot */
+            p = q + 1;
+            char dummy[64]; lvl_read_label(&p, dummy, sizeof(dummy));
+            slot++;
+            continue;
+        }
+
+        /* read b2 (normal instruction) */
+        while (*p && *p != '\n' && isspace((unsigned char)*p)) p++;
+        if (p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) p += 2;
+        if (!isxdigit((unsigned char)p[0])) continue;
+
+        uint8_t b2 = (uint8_t)strtoul((char[]){p[0], isxdigit((unsigned char)p[1]) ? p[1] : '0', '\0'}, NULL, 16);
+        p += isxdigit((unsigned char)p[1]) ? 2 : 1;
+        slot++;
+
+        /* 4-byte instructions take 2 slots: eat 2 more payload bytes */
+        if ((b1 == 0x0E && b2 == 0x01) || (b1 == 0x01 && b2 == 0x08)) {
+            for (int k = 0; k < 2; k++) {
+                while (*p && (isspace((unsigned char)*p) || *p == 'x' || *p == 'X')) p++;
+                if (p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) p += 2;
+                if (isxdigit((unsigned char)p[0]) && isxdigit((unsigned char)p[1])) p += 2;
+                else if (isxdigit((unsigned char)p[0])) p += 1;
             }
-        } else {
-            p++;
+            slot++;
         }
     }
 
-    /* PASS 2: Code Generation & Label Resolution */
+    /* ===== PASS 2: code generation + label resolution ===== */
     p = str;
     size_t count = 0;
-    cur_inst_slot = 0;
+    slot = 0;
 
     while (*p && count < max_size) {
         while (*p && (isspace((unsigned char)*p) || *p == ',' || *p == '{' || *p == '}')) p++;
         if (!*p) break;
 
-        /* Skip Label Definition: @name: */
+        /* skip label definitions */
         if (*p == '@') {
-            while (*p && !isspace((unsigned char)*p)) p++;
+            while (*p && *p != '\n' && *p != '\r') p++;
             continue;
         }
 
         if (p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) p += 2;
+        if (!isxdigit((unsigned char)p[0])) { p++; continue; }
 
-        /* Check for @label reference: [B1]@name (e.g. 09@loop, 0D@skip, 0F@exit) */
-        if (isxdigit((unsigned char)p[0]) && isxdigit((unsigned char)p[1]) && p[2] == '@') {
-            uint8_t op = (uint8_t)strtoul((char[]){p[0], p[1], '\0'}, NULL, 16);
-            p += 3;
-            const char *start = p;
-            while (*p && !isspace((unsigned char)*p) && *p != ',') p++;
-            size_t len = (size_t)(p - start);
-            char lbl_buf[64];
-            if (len >= sizeof(lbl_buf)) len = sizeof(lbl_buf) - 1;
-            strncpy(lbl_buf, start, len);
-            lbl_buf[len] = '\0';
+        /* read b1 */
+        uint8_t b1 = (uint8_t)strtoul((char[]){p[0], isxdigit((unsigned char)p[1]) ? p[1] : '0', '\0'}, NULL, 16);
+        p += isxdigit((unsigned char)p[1]) ? 2 : 1;
 
-            /* Find target label */
-            int target_idx = -1;
+        /* skip x separator */
+        if (*p == 'x' || *p == 'X') p++;
+
+        /* peek for @label reference after optional whitespace */
+        const char *peek = p;
+        while (*peek && *peek != '\n' && isspace((unsigned char)*peek)) peek++;
+        if (*peek == '@') {
+            p = peek + 1; /* skip '@' */
+            char lbl[64]; lvl_read_label(&p, lbl, sizeof(lbl));
+
+            int target = -1;
             for (size_t i = 0; i < label_count; i++) {
-                if (strcmp(labels[i].name, lbl_buf) == 0) {
-                    target_idx = (int)labels[i].inst_idx;
-                    break;
-                }
+                if (strcmp(labels[i].name, lbl) == 0) { target = (int)labels[i].inst_idx; break; }
             }
 
             uint8_t rel = 0;
-            if (target_idx != -1) {
-                if (op == 0x09 || op == 0x0C) {
-                    /* JMP_REL_BACK / JZ_REL_BACK: target is before current instruction */
-                    if ((int)cur_inst_slot + 1 >= target_idx) {
-                        rel = (uint8_t)((int)cur_inst_slot + 1 - target_idx);
-                    }
-                } else {
-                    /* JMP_REL_FWD / JZ_REL_FWD / JNZ_REL_FWD: target is after current instruction */
-                    if (target_idx >= (int)cur_inst_slot + 1) {
-                        rel = (uint8_t)(target_idx - ((int)cur_inst_slot + 1));
-                    }
+            if (target >= 0) {
+                if (b1 == 0x09) { /* JMP_REL_BACK */
+                    int d = (int)slot + 1 - target;
+                    rel = (d > 0 && d <= 255) ? (uint8_t)d : 0;
+                } else { /* 0B/0D/0F forward */
+                    int d = target - ((int)slot + 1);
+                    rel = (d >= 0 && d <= 255) ? (uint8_t)d : 0;
                 }
             }
-
-            out_buf[count++] = op;
+            out_buf[count++] = b1;
             out_buf[count++] = rel;
-            cur_inst_slot += 1;
+            slot++;
             continue;
         }
 
-        if (isxdigit((unsigned char)p[0])) {
-            char hex_byte[3] = { p[0], '\0', '\0' };
-            if (isxdigit((unsigned char)p[1])) {
-                hex_byte[1] = p[1];
-                p += 2;
-            } else {
-                p += 1;
+        /* normal instruction: read b2 */
+        while (*p && *p != '\n' && isspace((unsigned char)*p)) p++;
+        if (p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) p += 2;
+
+        if (!isxdigit((unsigned char)p[0])) {
+            out_buf[count++] = b1;
+            if (count % 2 == 0) slot++;
+            continue;
+        }
+
+        uint8_t b2 = (uint8_t)strtoul((char[]){p[0], isxdigit((unsigned char)p[1]) ? p[1] : '0', '\0'}, NULL, 16);
+        p += isxdigit((unsigned char)p[1]) ? 2 : 1;
+
+        out_buf[count++] = b1;
+        out_buf[count++] = b2;
+        slot++;
+
+        /* 4-byte instructions: emit 2 more payload bytes */
+        if ((b1 == 0x0E && b2 == 0x01) || (b1 == 0x01 && b2 == 0x08)) {
+            for (int k = 0; k < 2 && count < max_size; k++) {
+                while (*p && (isspace((unsigned char)*p) || *p == 'x' || *p == 'X')) p++;
+                if (p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) p += 2;
+                if (isxdigit((unsigned char)p[0]) && isxdigit((unsigned char)p[1])) {
+                    out_buf[count++] = (uint8_t)strtoul((char[]){p[0], p[1], '\0'}, NULL, 16); p += 2;
+                } else if (isxdigit((unsigned char)p[0])) {
+                    out_buf[count++] = (uint8_t)strtoul((char[]){p[0], '\0'}, NULL, 16); p++;
+                } else { out_buf[count++] = 0x00; }
             }
-            out_buf[count++] = (uint8_t)strtoul(hex_byte, NULL, 16);
-            if (count % 2 == 0) cur_inst_slot++;
-        } else {
-            p++;
+            slot++;
         }
     }
 
-    if (count % 2 != 0 && count < max_size) {
-        out_buf[count++] = 0x00; /* Auto-align odd hex stream */
-    }
+    if (count % 2 != 0 && count < max_size) out_buf[count++] = 0x00;
     return count;
 }
+
 
 static int handle_pkg_command(int argc, char **argv) {
     if (argc < 3) {
