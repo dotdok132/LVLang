@@ -14,11 +14,16 @@ You are an expert compiler agent for **LVLang** — a zero-overhead, 2-byte alig
 
 ### 1. Stack, Registers & RAM Memory (`Group 0x01`)
 - `01 80+N` : `PUSH_IMM N` — Push 7-bit integer $N$ ($0 \le N \le 127$) onto stack.
+- `01 08 L H`: `PUSH_IMM16` — Push 16-bit unsigned integer $0..65535$ directly onto stack (4-byte payload).
 - `01 04`   : `PUSH_SHIFT_8` — Pop $a$, push $a \ll 8$.
 - `01 05`   : `PUSH_SHIFT_16` — Pop $a$, push $a \ll 16$.
 - `01 01`   : `POP` — Pop top element from stack.
 - `01 02`   : `DUP` — Duplicate top element on stack.
 - `01 03`   : `SWAP` — Swap top two elements on stack.
+- `01 09`   : `OVER` — Copy 2nd element from top onto stack (`[a, b] -> [a, b, a]`).
+- `01 0A`   : `NIP` — Drop 2nd element from top (`[a, b] -> [b]`).
+- `01 0B`   : `TUCK` — Copy top element under 2nd element (`[a, b] -> [b, a, b]`).
+- `01 0C`   : `ROT` — Rotate top 3 stack elements (`[a, b, c] -> [b, c, a]`).
 - `01 10+R` : `LOAD R` — Push value of register $R_0..R_{15}$ onto stack.
 - `01 30+R` : `STORE R` — Pop stack top into register $R_0..R_{15}$.
 - `01 40+R` : `LOAD_RAM R` — **RAM Array Access**: Push value of `RAM[R_idx]` ($0..1023$) onto stack.

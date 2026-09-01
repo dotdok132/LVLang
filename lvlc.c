@@ -134,6 +134,22 @@ static int validate_bytecode(const uint8_t *code, size_t sz, bool verbose) {
             else if (b2 == 0x05) { if (verbose) printf("PUSH_SHIFT_16\n"); inst_count++; }
             else if (b2 == 0x06) { if (verbose) printf("MEMSET\n"); inst_count++; }
             else if (b2 == 0x07) { if (verbose) printf("MEMCPY\n"); inst_count++; }
+            else if (b2 == 0x08) {
+                if (ip + 2 <= sz) {
+                    uint8_t low = code[ip++];
+                    uint8_t high = code[ip++];
+                    uint16_t val = low | (high << 8);
+                    if (verbose) printf("PUSH_IMM16 %u\n", val);
+                    inst_count += 2;
+                } else {
+                    if (verbose) printf("[ERROR] Truncated PUSH_IMM16 payload!\n");
+                    err_count++; break;
+                }
+            }
+            else if (b2 == 0x09) { if (verbose) printf("OVER\n"); inst_count++; }
+            else if (b2 == 0x0A) { if (verbose) printf("NIP\n"); inst_count++; }
+            else if (b2 == 0x0B) { if (verbose) printf("TUCK\n"); inst_count++; }
+            else if (b2 == 0x0C) { if (verbose) printf("ROT\n"); inst_count++; }
             else if (b2 >= 0x10 && b2 <= 0x1F) { if (verbose) printf("LOAD R%d\n", b2 - 0x10); inst_count++; }
             else if (b2 >= 0x30 && b2 <= 0x3F) { if (verbose) printf("STORE R%d\n", b2 - 0x30); inst_count++; }
             else if (b2 >= 0x40 && b2 <= 0x4F) { if (verbose) printf("LOAD_RAM R%d\n", b2 - 0x40); inst_count++; }

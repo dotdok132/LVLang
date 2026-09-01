@@ -265,6 +265,54 @@ int lvl_step(lvl_vm_t *vm) {
             } else if (b2 == 0x05) {
                 /* PUSH_SHIFT_16: Pop a, push (a << 16) */
                 if (lvl_pop(vm, &a)) lvl_push(vm, a << 16);
+            } else if (b2 == 0x08) {
+                /* PUSH_IMM16: 16-bit Immediate Push (4-byte instruction: [01 08] [Low High]) */
+                if (vm->ip + 1 < vm->bytecode_size) {
+                    uint8_t low = vm->bytecode[vm->ip++];
+                    uint8_t high = vm->bytecode[vm->ip++];
+                    uint16_t val = (uint16_t)(low | (high << 8));
+                    lvl_push(vm, (int32_t)val);
+                } else {
+                    vm->status = LVL_ERR_OUT_OF_BOUNDS;
+                }
+            } else if (b2 == 0x09) {
+                /* OVER: [a, b] -> [a, b, a] */
+                if (vm->sp >= 2) {
+                    int32_t val = vm->stack[vm->sp - 2];
+                    lvl_push(vm, val);
+                } else {
+                    vm->status = LVL_ERR_STACK_UNDERFLOW;
+                }
+            } else if (b2 == 0x0A) {
+                /* NIP: [a, b] -> [b] */
+                if (vm->sp >= 2) {
+                    vm->stack[vm->sp - 2] = vm->stack[vm->sp - 1];
+                    vm->sp--;
+                } else {
+                    vm->status = LVL_ERR_STACK_UNDERFLOW;
+                }
+            } else if (b2 == 0x0B) {
+                /* TUCK: [a, b] -> [b, a, b] */
+                if (vm->sp >= 2) {
+                    int32_t top = vm->stack[vm->sp - 1];
+                    lvl_push(vm, top);
+                    vm->stack[vm->sp - 2] = vm->stack[vm->sp - 3];
+                    vm->stack[vm->sp - 3] = top;
+                } else {
+                    vm->status = LVL_ERR_STACK_UNDERFLOW;
+                }
+            } else if (b2 == 0x0C) {
+                /* ROT: [a, b, c] -> [b, c, a] */
+                if (vm->sp >= 3) {
+                    int32_t c_val = vm->stack[vm->sp - 1];
+                    int32_t b_val = vm->stack[vm->sp - 2];
+                    int32_t a_val = vm->stack[vm->sp - 3];
+                    vm->stack[vm->sp - 3] = b_val;
+                    vm->stack[vm->sp - 2] = c_val;
+                    vm->stack[vm->sp - 1] = a_val;
+                } else {
+                    vm->status = LVL_ERR_STACK_UNDERFLOW;
+                }
             } else if (b2 == 0x01) {
                 lvl_pop(vm, &a);
             } else if (b2 == 0x02) {
