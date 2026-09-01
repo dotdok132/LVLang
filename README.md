@@ -9,16 +9,14 @@
 
 ---
 
-## ⚡ Quick Start
+## ⚡ Quick Start (Automated One-Line Installation)
 
 ```bash
-# 1. Clone & Build
-git clone https://github.com/dotdok132/LVLang
-cd LVLang
-gcc -O3 -Wall lvlc.c -o lvlc -lSDL2 -lm
+# 1-Line Installer (Automatically clones all FFI plugins, installs dependencies & builds lvlc)
+git clone https://github.com/dotdok132/LVLang && cd LVLang && bash install.sh
 
 # 2. Run Hello World ("Hi!" + Newline)
-./lvlc "05x03 48x69 21x00 05x04 05xFF"
+lvlc "05x03 48x69 21x00 05x04 05xFF"
 ```
 
 ## 🏗️ Architecture

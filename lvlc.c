@@ -7,15 +7,71 @@
 #define _POSIX_C_SOURCE 200809L
 #define LVLANG_IMPLEMENTATION
 #include "lvlang.h"
-#include "../lvlang-system/system_plugin.c"
-#include "../lvlang-crypto/crypto_plugin.c"
-#include "../lvlang-keyboard/keyboard_plugin.c"
-#include "../lvlang-sdl2/sdl2_plugin.c"
-#include "../lvlang-time/time_plugin.c"
-#include "../lvlang-string/string_plugin.c"
-#include "../lvlang-ansi/ansi_plugin.c"
-#include "../lvlang-heap/heap_plugin.c"
-#include "../lvlang-net/net_plugin.c"
+#if defined(__has_include)
+  #if __has_include("../lvlang-system/system_plugin.c")
+    #include "../lvlang-system/system_plugin.c"
+  #else
+    static inline void lvl_plugin_system_init(lvl_vm_t *vm) { (void)vm; }
+  #endif
+
+  #if __has_include("../lvlang-crypto/crypto_plugin.c")
+    #include "../lvlang-crypto/crypto_plugin.c"
+  #else
+    static inline void lvl_plugin_crypto_init(lvl_vm_t *vm) { (void)vm; }
+  #endif
+
+  #if __has_include("../lvlang-keyboard/keyboard_plugin.c")
+    #include "../lvlang-keyboard/keyboard_plugin.c"
+  #else
+    static inline void lvl_plugin_keyboard_init(lvl_vm_t *vm) { (void)vm; }
+  #endif
+
+  #if __has_include("../lvlang-sdl2/sdl2_plugin.c")
+    #include "../lvlang-sdl2/sdl2_plugin.c"
+  #else
+    static inline void lvl_plugin_sdl2_init(lvl_vm_t *vm) { (void)vm; }
+  #endif
+
+  #if __has_include("../lvlang-time/time_plugin.c")
+    #include "../lvlang-time/time_plugin.c"
+  #else
+    static inline void lvl_plugin_time_init(lvl_vm_t *vm) { (void)vm; }
+  #endif
+
+  #if __has_include("../lvlang-string/string_plugin.c")
+    #include "../lvlang-string/string_plugin.c"
+  #else
+    static inline void lvl_plugin_string_init(lvl_vm_t *vm) { (void)vm; }
+  #endif
+
+  #if __has_include("../lvlang-ansi/ansi_plugin.c")
+    #include "../lvlang-ansi/ansi_plugin.c"
+  #else
+    static inline void lvl_plugin_ansi_init(lvl_vm_t *vm) { (void)vm; }
+  #endif
+
+  #if __has_include("../lvlang-heap/heap_plugin.c")
+    #include "../lvlang-heap/heap_plugin.c"
+  #else
+    static inline void lvl_plugin_heap_init(lvl_vm_t *vm) { (void)vm; }
+  #endif
+
+  #if __has_include("../lvlang-net/net_plugin.c")
+    #include "../lvlang-net/net_plugin.c"
+  #else
+    static inline void lvl_plugin_net_init(lvl_vm_t *vm) { (void)vm; }
+  #endif
+#else
+  #include "../lvlang-system/system_plugin.c"
+  #include "../lvlang-crypto/crypto_plugin.c"
+  #include "../lvlang-keyboard/keyboard_plugin.c"
+  #include "../lvlang-sdl2/sdl2_plugin.c"
+  #include "../lvlang-time/time_plugin.c"
+  #include "../lvlang-string/string_plugin.c"
+  #include "../lvlang-ansi/ansi_plugin.c"
+  #include "../lvlang-heap/heap_plugin.c"
+  #include "../lvlang-net/net_plugin.c"
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
