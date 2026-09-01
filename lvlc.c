@@ -104,30 +104,153 @@ static void print_usage(const char *prog) {
     printf("  %s pkg install crypto\n", prog);
 }
 
-static size_t parse_hex_stream(const char *str, uint8_t *out_buf, size_t max_size) {
-    size_t count = 0;
-    const char *p = str;
+typedef struct {
+    char name[64];
+    size_t inst_idx;
+} lvl_label_t;
 
-    while (*p && count < max_size) {
-        while (*p && (isspace((unsigned char)*p) || *p == ',' || *p == '{' || *p == '}' || *p == 'x' || *p == 'X')) p++;
+static size_t parse_hex_stream(const char *str, uint8_t *out_buf, size_t max_size) {
+    lvl_label_t labels[128];
+    size_t label_count = 0;
+
+    /* PASS 1: Symbol & Label Discovery */
+    const char *p = str;
+    size_t cur_inst_slot = 0;
+
+    while (*p) {
+        while (*p && (isspace((unsigned char)*p) || *p == ',' || *p == '{' || *p == '}')) p++;
         if (!*p) break;
 
+        /* Label Definition: @name: */
+        if (*p == '@') {
+            const char *start = p + 1;
+            while (*p && *p != ':' && !isspace((unsigned char)*p)) p++;
+            if (*p == ':') {
+                size_t len = (size_t)(p - start);
+                if (len < sizeof(labels[0].name) && label_count < 128) {
+                    strncpy(labels[label_count].name, start, len);
+                    labels[label_count].name[len] = '\0';
+                    labels[label_count].inst_idx = cur_inst_slot;
+                    label_count++;
+                }
+                p++; /* skip ':' */
+                continue;
+            }
+        }
+
+        /* Check opcode token */
         if (p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) p += 2;
 
+        /* Check for @label reference like 09@name, 0D@name, 0F@name */
+        if (isxdigit((unsigned char)p[0]) && isxdigit((unsigned char)p[1]) && p[2] == '@') {
+            cur_inst_slot += 1;
+            p += 3;
+            while (*p && !isspace((unsigned char)*p) && *p != ',') p++;
+            continue;
+        }
+
         if (isxdigit((unsigned char)p[0]) && isxdigit((unsigned char)p[1])) {
-            char hex_byte[3] = { p[0], p[1], '\0' };
-            out_buf[count++] = (uint8_t)strtoul(hex_byte, NULL, 16);
+            uint8_t b1 = (uint8_t)strtoul((char[]){p[0], p[1], '\0'}, NULL, 16);
             p += 2;
-        } else if (isxdigit((unsigned char)p[0])) {
-            char hex_byte[2] = { p[0], '\0' };
-            out_buf[count++] = (uint8_t)strtoul(hex_byte, NULL, 16);
-            p += 1;
+            while (*p && (isspace((unsigned char)*p) || *p == 'x' || *p == 'X')) p++;
+            if (isxdigit((unsigned char)p[0]) && isxdigit((unsigned char)p[1])) {
+                uint8_t b2 = (uint8_t)strtoul((char[]){p[0], p[1], '\0'}, NULL, 16);
+                p += 2;
+                cur_inst_slot += 1;
+
+                /* 4-byte instructions span 2 instruction slots */
+                if ((b1 == 0x0E && b2 == 0x01) || (b1 == 0x01 && b2 == 0x08)) {
+                    /* Read next 2 payload bytes */
+                    for (int k = 0; k < 2; k++) {
+                        while (*p && (isspace((unsigned char)*p) || *p == 'x' || *p == 'X')) p++;
+                        if (isxdigit((unsigned char)p[0]) && isxdigit((unsigned char)p[1])) {
+                            p += 2;
+                        }
+                    }
+                    cur_inst_slot += 1;
+                }
+            }
         } else {
             p++;
         }
     }
+
+    /* PASS 2: Code Generation & Label Resolution */
+    p = str;
+    size_t count = 0;
+    cur_inst_slot = 0;
+
+    while (*p && count < max_size) {
+        while (*p && (isspace((unsigned char)*p) || *p == ',' || *p == '{' || *p == '}')) p++;
+        if (!*p) break;
+
+        /* Skip Label Definition: @name: */
+        if (*p == '@') {
+            while (*p && !isspace((unsigned char)*p)) p++;
+            continue;
+        }
+
+        if (p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) p += 2;
+
+        /* Check for @label reference: [B1]@name (e.g. 09@loop, 0D@skip, 0F@exit) */
+        if (isxdigit((unsigned char)p[0]) && isxdigit((unsigned char)p[1]) && p[2] == '@') {
+            uint8_t op = (uint8_t)strtoul((char[]){p[0], p[1], '\0'}, NULL, 16);
+            p += 3;
+            const char *start = p;
+            while (*p && !isspace((unsigned char)*p) && *p != ',') p++;
+            size_t len = (size_t)(p - start);
+            char lbl_buf[64];
+            if (len >= sizeof(lbl_buf)) len = sizeof(lbl_buf) - 1;
+            strncpy(lbl_buf, start, len);
+            lbl_buf[len] = '\0';
+
+            /* Find target label */
+            int target_idx = -1;
+            for (size_t i = 0; i < label_count; i++) {
+                if (strcmp(labels[i].name, lbl_buf) == 0) {
+                    target_idx = (int)labels[i].inst_idx;
+                    break;
+                }
+            }
+
+            uint8_t rel = 0;
+            if (target_idx != -1) {
+                if (op == 0x09 || op == 0x0C) {
+                    /* JMP_REL_BACK / JZ_REL_BACK: target is before current instruction */
+                    if ((int)cur_inst_slot + 1 >= target_idx) {
+                        rel = (uint8_t)((int)cur_inst_slot + 1 - target_idx);
+                    }
+                } else {
+                    /* JMP_REL_FWD / JZ_REL_FWD / JNZ_REL_FWD: target is after current instruction */
+                    if (target_idx >= (int)cur_inst_slot + 1) {
+                        rel = (uint8_t)(target_idx - ((int)cur_inst_slot + 1));
+                    }
+                }
+            }
+
+            out_buf[count++] = op;
+            out_buf[count++] = rel;
+            cur_inst_slot += 1;
+            continue;
+        }
+
+        if (isxdigit((unsigned char)p[0])) {
+            char hex_byte[3] = { p[0], '\0', '\0' };
+            if (isxdigit((unsigned char)p[1])) {
+                hex_byte[1] = p[1];
+                p += 2;
+            } else {
+                p += 1;
+            }
+            out_buf[count++] = (uint8_t)strtoul(hex_byte, NULL, 16);
+            if (count % 2 == 0) cur_inst_slot++;
+        } else {
+            p++;
+        }
+    }
+
     if (count % 2 != 0 && count < max_size) {
-        out_buf[count++] = 0x00; /* Auto-align odd hex stream to 2-byte boundary for AI safety */
+        out_buf[count++] = 0x00; /* Auto-align odd hex stream */
     }
     return count;
 }
@@ -451,9 +574,28 @@ int main(int argc, char **argv) {
         fseek(f, 0, SEEK_SET);
 
         if (fsize > (long)sizeof(bytecode)) fsize = sizeof(bytecode);
-        bytecode_size = fread(bytecode, 1, fsize, f);
+        char tmp_buf[8192];
+        size_t read_bytes = fread(tmp_buf, 1, fsize, f);
         fclose(f);
-        if (!json_mode) printf("[+] Loaded %zu bytes from binary file: %s\n", bytecode_size, target);
+
+        /* Check if file contains text hex stream (e.g. "01x08 20x03...") or raw binary */
+        bool is_text_hex = false;
+        for (size_t i = 0; i < read_bytes; i++) {
+            if (tmp_buf[i] == 'x' || tmp_buf[i] == 'X' || isspace((unsigned char)tmp_buf[i])) {
+                is_text_hex = true;
+                break;
+            }
+        }
+
+        if (is_text_hex) {
+            tmp_buf[read_bytes] = '\0';
+            bytecode_size = parse_hex_stream(tmp_buf, bytecode, sizeof(bytecode));
+            if (!json_mode) printf("[+] Loaded %zu bytecode bytes from text stream file: %s\n", bytecode_size, target);
+        } else {
+            memcpy(bytecode, tmp_buf, read_bytes);
+            bytecode_size = read_bytes;
+            if (!json_mode) printf("[+] Loaded %zu bytes from binary file: %s\n", bytecode_size, target);
+        }
     } else {
         bytecode_size = parse_hex_stream(target, bytecode, sizeof(bytecode));
         if (bytecode_size == 0) {
